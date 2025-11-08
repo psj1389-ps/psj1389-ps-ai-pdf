@@ -1,9 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { HomeIcon, PdfIcon, SearchIcon, RecentFileIcon, GlobeIcon, UserIcon, LogoutIcon } from './icons';
-import { getTranslator, RecentFile, ActiveTool, languages } from '../types';
-import { supabase } from '../lib/supabaseClient';
 import type { Session } from '@supabase/supabase-js';
-
+import { supabase } from '../lib/supabaseClient';
+import { RecentFile, ActiveTool, getTranslator, LANGUAGES } from '../types';
+import {
+    HomeIcon,
+    SummarizeIcon,
+    TranslateIcon,
+    HistoryIcon,
+    SettingsIcon,
+    LogoIcon,
+    GlobeIcon,
+    CheckIcon,
+    ChevronDownIcon,
+    LogoutIcon,
+    UserIcon
+} from './icons';
 
 interface SidebarProps {
     onNewChat: () => void;
@@ -16,10 +27,9 @@ interface SidebarProps {
     session: Session | null;
 }
 
-
-const Sidebar: React.FC<SidebarProps> = ({ 
-    onNewChat, 
-    targetLanguage, 
+const Sidebar: React.FC<SidebarProps> = ({
+    onNewChat,
+    targetLanguage,
     onLanguageChange,
     recentFiles,
     onRecentFileClick,
@@ -27,32 +37,26 @@ const Sidebar: React.FC<SidebarProps> = ({
     onToolSelect,
     session,
 }) => {
-    const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
-    const [pdfToolsMenuOpen, setPdfToolsMenuOpen] = useState(false);
+    const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const languageMenuRef = useRef<HTMLDivElement>(null);
+    const languageDropdownRef = useRef<HTMLDivElement>(null);
+    
     const t = getTranslator(targetLanguage);
 
-    const formatFileSize = (bytes: number): string => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    const handleSignOut = async () => {
+        await supabase.auth.signOut();
     };
 
-    const formatDate = (timestamp: number): string => {
-        const date = new Date(timestamp);
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
+    const handleLanguageSelect = (langCode: string) => {
+        onLanguageChange(langCode);
+        setShowLanguageDropdown(false);
+        setSearchTerm('');
     };
-
+    
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (languageMenuRef.current && !languageMenuRef.current.contains(event.target as Node)) {
-                setLanguageMenuOpen(false);
+            if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target as Node)) {
+                setShowLanguageDropdown(false);
             }
         };
 
@@ -62,160 +66,168 @@ const Sidebar: React.FC<SidebarProps> = ({
         };
     }, []);
 
-    const filteredLanguages = languages.filter(lang => 
+
+    const filteredLanguages = LANGUAGES.filter(lang =>
         lang.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lang.native.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const currentLanguage = LANGUAGES.find(lang => lang.code === targetLanguage) || LANGUAGES[0];
+
     return (
-        <aside className="w-64 bg-white border-r border-gray-200 p-4 flex-col hidden md:flex">
-            
-            <nav className="mt-4">
-                <ul>
-                    <li>
-                         <button 
-                            onClick={onNewChat} 
-                            className={`w-full flex items-center p-2 text-sm font-medium rounded-md transition-colors ${
-                                activeTool === 'home' 
-                                ? 'bg-[#E2E3E5] text-gray-900' 
-                                : 'text-gray-600 hover:bg-gray-100'
+        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen hidden md:flex">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200 flex items-center gap-2">
+                <LogoIcon className="w-8 h-8 flex-shrink-0" />
+                <h1 className="text-xl font-bold text-gray-800 truncate">PDF AI Summarizer</h1>
+            </div>
+
+            {/* New Chat Button */}
+            <div className="p-4">
+                <button
+                    onClick={() => {
+                        onNewChat();
+                        onToolSelect('home');
+                    }}
+                    className="w-full bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-lg transition-colors font-semibold text-sm flex items-center justify-center shadow-sm hover:shadow-md"
+                >
+                    + {t('newChat')}
+                </button>
+            </div>
+
+            {/* Tools Menu & Recent Files */}
+            <div className="flex-1 overflow-y-auto">
+                <div className="px-4 py-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-3">
+                        {t('tools')}
+                    </p>
+                    <div className="space-y-1">
+                        <button
+                            onClick={() => onToolSelect('home')}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
+                                activeTool === 'home'
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : 'hover:bg-gray-100 text-gray-600'
                             }`}
                         >
-                            <HomeIcon className="w-5 h-5 mr-3" />
-                            {t('home')}
+                            <HomeIcon className="w-5 h-5" />
+                            <span>{t('home')}</span>
                         </button>
-                    </li>
-                     <li>
-                        <button onClick={() => setPdfToolsMenuOpen(!pdfToolsMenuOpen)} className="w-full flex items-center p-2 text-sm text-gray-600 rounded-md hover:bg-gray-100 group text-left mt-1">
-                            <PdfIcon className="w-5 h-5 mr-3 text-gray-500 group-hover:text-gray-700" />
-                            <span className="flex-1">{t('pdfTools')}</span>
-                             <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${pdfToolsMenuOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        <button
+                            onClick={() => onToolSelect('summarize')}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
+                                activeTool === 'summarize'
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : 'hover:bg-gray-100 text-gray-600'
+                            }`}
+                        >
+                            <SummarizeIcon className="w-5 h-5" />
+                            <span>{t('summarize')}</span>
                         </button>
-                        {pdfToolsMenuOpen && (
-                            <ul className="pl-7 mt-1">
-                                <li>
-                                     <button 
-                                        onClick={() => onToolSelect('summarize')} 
-                                        className={`w-full text-left block p-1 text-sm rounded-md transition-colors ${
-                                            activeTool === 'summarize' 
-                                            ? 'bg-gray-100 text-gray-800 font-semibold' 
-                                            : 'text-gray-600 hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        {t('toolSummarize')}
-                                    </button>
-                                </li>
-                                <li>
-                                     <button 
-                                        onClick={() => onToolSelect('translate')} 
-                                        className={`w-full text-left block p-1 text-sm rounded-md transition-colors ${
-                                            activeTool === 'translate' 
-                                            ? 'bg-gray-100 text-gray-800 font-semibold' 
-                                            : 'text-gray-600 hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        {t('toolTranslate')}
-                                    </button>
-                                </li>
-                                <li>
-                                     <a 
-                                        href="https://77-tools.xyz"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className={`w-full text-left block p-1 text-sm rounded-md transition-colors text-gray-600 hover:bg-gray-100`}
-                                    >
-                                        {t('toolConvert')}
-                                    </a>
-                                </li>
-                            </ul>
-                        )}
-                    </li>
-                </ul>
-            </nav>
+                        <button
+                            onClick={() => onToolSelect('translate')}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
+                                activeTool === 'translate'
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : 'hover:bg-gray-100 text-gray-600'
+                            }`}
+                        >
+                            <TranslateIcon className="w-5 h-5" />
+                            <span>{t('translate')}</span>
+                        </button>
+                    </div>
+                </div>
 
-            <div className="flex-1 overflow-y-auto mt-4">
-                <h3 className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('recent')}</h3>
-                {recentFiles.length > 0 ? (
-                    <ul>
-                        {recentFiles.map((file, index) => (
-                            <li key={`${file.name}-${index}`}>
-                                <button 
+                {recentFiles.length > 0 && (
+                    <div className="px-4 py-2 mt-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-3">
+                            {t('recent')}
+                        </p>
+                        <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                            {recentFiles.map((file, index) => (
+                                <button
+                                    key={`${file.name}-${index}`}
                                     onClick={() => onRecentFileClick(file.name)}
-                                    className="w-full flex items-start p-2 text-sm text-gray-600 rounded-md hover:bg-gray-100 text-left group"
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-100 text-left text-sm text-gray-600 transition-colors group"
                                 >
-                                    <RecentFileIcon className="w-5 h-5 mr-3 text-red-500 flex-shrink-0 mt-0.5" />
-                                    <div className="flex-1 overflow-hidden">
-                                        <p className="font-medium text-gray-800 truncate group-hover:text-gray-900" title={file.name}>{file.name}</p>
-                                        <div className="flex justify-between items-center text-xs text-gray-400 mt-1">
-                                            <span>{formatFileSize(file.size)}</span>
-                                            <span>{formatDate(file.lastModified)}</span>
-                                        </div>
-                                    </div>
+                                    <HistoryIcon className="w-4 h-4 flex-shrink-0 text-gray-400 group-hover:text-gray-600" />
+                                    <span className="truncate font-medium text-gray-700 group-hover:text-gray-900">{file.name}</span>
                                 </button>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <div className="p-2 text-sm text-gray-500">
-                        {t('noHistory')}
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
-            
-            <div className="mt-auto">
-                 <div className="border-t pt-2">
-                    {session ? (
-                         <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center p-2 text-sm text-gray-600 rounded-md hover:bg-gray-100 group text-left">
-                            <LogoutIcon className="w-5 h-5 mr-3 text-gray-500 group-hover:text-gray-700" />
-                            <span>{t('logout')}</span>
-                         </button>
-                    ) : (
-                         <button onClick={() => onToolSelect('auth')} className="w-full flex items-center p-2 text-sm text-gray-600 rounded-md hover:bg-gray-100 group text-left">
-                            <UserIcon className="w-5 h-5 mr-3 text-gray-500 group-hover:text-gray-700" />
-                            <span>{t('login')}</span>
-                         </button>
-                    )}
-                 </div>
-                <div ref={languageMenuRef} className="relative">
-                    <button onClick={() => setLanguageMenuOpen(!languageMenuOpen)} className="w-full flex items-center p-2 text-sm text-gray-600 rounded-md hover:bg-gray-100 group text-left">
-                        <GlobeIcon className="w-5 h-5 mr-3 text-gray-500 group-hover:text-gray-700" />
-                        <span className="flex-1">{targetLanguage}</span>
-                        <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 p-4 space-y-2">
+                <div ref={languageDropdownRef} className="relative">
+                    <button
+                        onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
+                    >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <GlobeIcon className="w-5 h-5 flex-shrink-0" />
+                            <span className="text-sm truncate">{currentLanguage.native}</span>
+                        </div>
+                        <ChevronDownIcon className={`w-4 h-4 transition-transform flex-shrink-0 ${showLanguageDropdown ? 'rotate-180' : ''}`} />
                     </button>
-                    {languageMenuOpen && (
-                        <div className="absolute bottom-full mb-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-10">
-                            <div className="relative mb-2">
-                                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+
+                    {showLanguageDropdown && (
+                        <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 flex flex-col z-50">
+                            <div className="p-2 border-b border-gray-200">
                                 <input
                                     type="text"
-                                    placeholder={t('search') + '...'}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-8 pr-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                    placeholder={`${t('search')}...`}
+                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                    autoFocus
                                 />
                             </div>
-                            <ul className="max-h-60 overflow-y-auto">
+                            
+                            <div className="overflow-y-auto">
                                 {filteredLanguages.map((lang) => (
-                                    <li key={lang.code}>
-                                        <button 
-                                            onClick={() => {
-                                                onLanguageChange(lang.code);
-                                                setLanguageMenuOpen(false);
-                                                setSearchTerm('');
-                                            }} 
-                                            className={`w-full text-left block p-2 text-sm rounded-md transition-colors ${targetLanguage === lang.code ? 'bg-violet-100 text-violet-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}
-                                        >
-                                            <div className="flex justify-between items-center">
-                                                <span>{lang.native}</span>
-                                                <span className="text-xs text-gray-400">{lang.name}</span>
-                                            </div>
-                                        </button>
-                                    </li>
+                                    <button
+                                        key={lang.code}
+                                        onClick={() => handleLanguageSelect(lang.code)}
+                                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left hover:bg-gray-100 transition-colors ${
+                                            targetLanguage === lang.code ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-700'
+                                        }`}
+                                    >
+                                        <span className="truncate">{lang.flag} {lang.native}</span>
+                                        {targetLanguage === lang.code && (
+                                            <CheckIcon className="w-4 h-4 text-violet-600 flex-shrink-0" />
+                                        )}
+                                    </button>
                                 ))}
-                            </ul>
+                                {filteredLanguages.length === 0 && (
+                                    <div className="px-3 py-4 text-center text-sm text-gray-500">
+                                        No languages found.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
+                
+                {session ? (
+                    <button
+                        onClick={handleSignOut}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors text-sm"
+                    >
+                        <LogoutIcon className="w-5 h-5" />
+                        <span>{t('signOut')}</span>
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => onToolSelect('auth')}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors text-sm"
+                    >
+                        <UserIcon className="w-5 h-5" />
+                        <span>{t('signIn')}</span>
+                    </button>
+                )}
             </div>
         </aside>
     );

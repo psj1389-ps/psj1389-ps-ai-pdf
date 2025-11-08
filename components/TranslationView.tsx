@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { PdfFile, getTranslator } from '../types';
+import { PdfFile, getTranslator, LANGUAGES } from '../types';
 
 interface TranslationViewProps {
     pdfFile: PdfFile;
@@ -12,13 +12,6 @@ interface TranslationViewProps {
     targetLanguage: string;
     onLanguageChange: (language: string) => void;
 }
-
-const languages = [
-    { code: '한국어', name: '한국어' },
-    { code: 'English', name: 'English' },
-    { code: '日本語', name: '日本語' },
-    { code: '中文', name: '中文' },
-];
 
 const TranslationView: React.FC<TranslationViewProps> = ({
     pdfFile,
@@ -42,10 +35,10 @@ const TranslationView: React.FC<TranslationViewProps> = ({
                     <select
                         value={targetLanguage}
                         onChange={(e) => onLanguageChange(e.target.value)}
-                        className="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        className="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
                     >
-                        {languages.map(lang => (
-                            <option key={lang.code} value={lang.code}>{lang.name}</option>
+                        {LANGUAGES.map(lang => (
+                            <option key={lang.code} value={lang.code}>{lang.native}</option>
                         ))}
                     </select>
                     <button
