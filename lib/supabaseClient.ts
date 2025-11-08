@@ -1,16 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// IMPORTANT: These variables should be configured in your environment.
-// For local development, you can create a .env.local file.
-// For deployment, configure them in your hosting provider's settings.
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+// IMPORTANT: Replace these placeholder values with your actual Supabase project URL and anon key.
+// You can find these in your Supabase project's settings under "API".
+const supabaseUrl = 'https://your-project-id.supabase.co';
+const supabaseAnonKey = 'your-supabase-anon-key';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error(
-    'Supabase environment variables are not set. Please set SUPABASE_URL and SUPABASE_ANON_KEY.'
+if (supabaseUrl.includes('your-project-id') || supabaseAnonKey.includes('your-supabase-anon-key')) {
+  console.warn(
+    'Supabase credentials are not set. Please replace the placeholder values in `lib/supabaseClient.ts` with your actual Supabase URL and anon key for authentication to work.'
   );
 }
 
-// The `!` asserts that the values are not null/undefined. The check above ensures this.
-export const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

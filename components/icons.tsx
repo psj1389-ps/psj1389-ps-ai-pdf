@@ -1,3 +1,5 @@
+// components/icons.tsx
+
 import React from 'react';
 
 export const LogoIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -127,4 +129,31 @@ export const CompareIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <path d="M7 21.9l-4-4 4-4" />
     <path d="M21 11.4v2.6a4 4 0 0 1-4 4H3" />
   </svg>
+);
+
+export const LoadingDocumentIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg width="96" height="96" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <path d="M9 20H4V8H9V20Z" opacity="0.5"/>
+        <path d="M14 18H9V6H14V18Z" opacity="0.75"/>
+        <path d="M19 16H14V4H19V16Z" />
+        <path d="M15 8H18V9H15V8Z" fill="white"/>
+        <path d="M15 10H18V11H15V10Z" fill="white"/>
+        <path d="M15 12H17V13H15V12Z" fill="white"/>
+    </svg>
+);
+
+export const SummaryIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+        <path d="M15 5.5l3 3" />
+        <path d="M10 18l5-5-3-3-5 5v3h3z" />
+    </svg>
+);
+
+export const UserIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+);
+
+export const LogoutIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
 );

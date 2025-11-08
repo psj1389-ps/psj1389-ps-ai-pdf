@@ -1,17 +1,20 @@
 
 import React from 'react';
 import { RecentFileIcon } from './icons';
+import { getTranslator } from '../types';
 
 interface ProcessingViewProps {
     fileName: string;
     progress: number;
     onCancel: () => void;
+    language: string;
 }
 
-const ProcessingView: React.FC<ProcessingViewProps> = ({ fileName, progress, onCancel }) => {
+const ProcessingView: React.FC<ProcessingViewProps> = ({ fileName, progress, onCancel, language }) => {
+    const t = getTranslator(language);
     const statusText = progress < 30 
-        ? `PDF 파일 로딩 중... (${progress}%)`
-        : `텍스트 추출 중... (${progress}%)`;
+        ? t('loadingPDF', { progress })
+        : t('extractingText', { progress });
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center text-center">
@@ -37,7 +40,7 @@ const ProcessingView: React.FC<ProcessingViewProps> = ({ fileName, progress, onC
                         onClick={onCancel}
                         className="px-6 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
                     >
-                        취소
+                        {t('cancel')}
                     </button>
                 </div>
             </div>

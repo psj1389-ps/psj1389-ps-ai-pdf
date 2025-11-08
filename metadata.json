@@ -1,5 +1,5 @@
 {
-  "name": "ChatPDF AI Summarizer",
+  "name": "PDF AI Summarizer",
   "description": "An AI-powered application to upload PDF documents, get summaries, and ask questions about the content through an interactive chat.",
   "requestFramePermissions": []
 }

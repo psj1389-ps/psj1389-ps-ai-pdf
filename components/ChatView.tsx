@@ -1,11 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
-import { PdfFile, ChatMessage } from '../types';
-import { DownloadIcon, RotateCcwIcon, RotateCwIcon, ZoomInIcon, ZoomOutIcon, SendIcon, SparklesIcon, CopyIcon, ThumbsDownIcon, ThumbsUpIcon, ClipboardIcon, PhoneIcon, MicrophoneIcon, ExpandIcon, ArrowDownIcon } from './icons';
-import Markdown from 'react-markdown';
-
-// Define the type for pdfjsLib globally
-declare const pdfjsLib: any;
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { PdfFile, ChatMessage, getTranslator } from '../types';
+import SummarySkeleton from './SummarySkeleton';
+import {
+    DownloadIcon,
+    RotateCwIcon,
+    SendIcon,
+    LogoIcon,
+    SparklesIcon,
+    ThumbsUpIcon,
+    ThumbsDownIcon,
+    CopyIcon,
+    SummaryIcon
+} from './icons';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatViewProps {
     pdfDocument: PDFDocumentProxy;
@@ -13,312 +22,418 @@ interface ChatViewProps {
     chatHistory: ChatMessage[];
     isReplying: boolean;
     onSendMessage: (message: string) => void;
+    language: string;
 }
 
-const PdfThumbnails: React.FC<{ pdfDoc: PDFDocumentProxy; onPageSelect: (page: number) => void; currentPage: number }> = ({ pdfDoc, onPageSelect, currentPage }) => {
-    const [thumbnails, setThumbnails] = useState<string[]>([]);
+const commonProseClasses = `
+    markdown-summary
+    prose max-w-none 
+    prose-h1:text-xl prose-h1:font-bold prose-h1:mb-4
+    prose-h2:text-xl prose-h2:font-bold prose-h2:mt-6 prose-h2:mb-3
+    prose-p:my-0 prose-p:mb-4
+    prose-ul:my-3
+    prose-ol:my-3
+    prose-li:my-1
+    prose-code:bg-gray-200 prose-code:rounded prose-code:px-1.5 prose-code:py-1 prose-code:font-mono prose-code:text-sm prose-code:before:content-[''] prose-code:after:content-['']
+    prose-a:text-[#3b82f6] prose-a:font-medium hover:prose-a:underline
+`;
 
-    useEffect(() => {
-        const generateThumbnails = async () => {
-            const thumbs: string[] = [];
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
-                const page = await pdfDoc.getPage(i);
-                const viewport = page.getViewport({ scale: 0.2 });
+const ChatView: React.FC<ChatViewProps> = ({
+    pdfDocument,
+    pdfFile,
+    chatHistory,
+    isReplying,
+    onSendMessage,
+    language,
+}) => {
+    const [numPages, setNumPages] = useState(pdfDocument.numPages);
+    const [scale, setScale] = useState(1.0);
+    const [rotation, setRotation] = useState(0);
+    const [message, setMessage] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [thumbnails, setThumbnails] = useState<string[]>([]);
+    const [chatWidth, setChatWidth] = useState<number | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [isZoomOpen, setIsZoomOpen] = useState(false);
+    const [zoomLabel, setZoomLabel] = useState('Auto');
+    
+    const pdfContainerRef = useRef<HTMLDivElement>(null);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
+    const resizerRef = useRef<HTMLDivElement>(null);
+    const thumbnailsContainerRef = useRef<HTMLDivElement>(null);
+    const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const isResizingRef = useRef(false);
+    const zoomDropdownRef = useRef<HTMLDivElement>(null);
+
+    const t = getTranslator(language);
+
+    const calculateOptimalScale = useCallback(async (): Promise<number> => {
+        if (!pdfDocument || !pdfContainerRef.current) return 1.0;
+        try {
+            const page = await pdfDocument.getPage(1);
+            const containerWidth = pdfContainerRef.current.clientWidth - 40; // With padding
+            const viewport = page.getViewport({ scale: 1, rotation });
+            return containerWidth / viewport.width;
+        } catch (error) {
+            console.error('Error calculating optimal scale:', error);
+            return 1.0;
+        }
+    }, [pdfDocument, rotation]);
+
+    const renderAllPages = useCallback(async (newScale: number) => {
+        if (!pdfDocument || !pdfContainerRef.current) return;
+        
+        const container = pdfContainerRef.current;
+        container.innerHTML = ''; // Clear previous pages
+        pageRefs.current = [];
+
+        for (let i = 1; i <= pdfDocument.numPages; i++) {
+            try {
+                const page = await pdfDocument.getPage(i);
+                const viewport = page.getViewport({ scale: newScale, rotation });
+
+                const pageContainer = document.createElement('div');
+                pageContainer.className = 'mb-4 shadow-lg';
+                pageContainer.dataset.pageNumber = String(i);
+
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
+                if (!context) continue;
+
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
 
-                if(context) {
-                    // FIX: The TypeScript error indicates that the `RenderParameters` type requires a `canvas` property. This might be due to a project-specific type definition or a version mismatch.
-                    await page.render({ canvasContext: context, viewport: viewport, canvas: canvas }).promise;
-                    thumbs.push(canvas.toDataURL());
-                }
+                pageContainer.appendChild(canvas);
+                container.appendChild(pageContainer);
+                pageRefs.current[i - 1] = pageContainer;
+
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport,
+                    canvas: canvas,
+                }).promise;
+            } catch (pageError) {
+                console.error(`Error rendering page ${i}:`, pageError);
             }
-            setThumbnails(thumbs);
-        };
-
-        generateThumbnails();
-    }, [pdfDoc]);
-
-    return (
-        <div className="w-48 bg-gray-50 p-2 overflow-y-auto border-r border-gray-200 hidden lg:block">
-            {thumbnails.map((thumb, index) => (
-                <div
-                    key={index}
-                    onClick={() => onPageSelect(index + 1)}
-                    className={`cursor-pointer p-1 rounded-md mb-2 ${currentPage === index + 1 ? 'bg-gray-200 border-2 border-gray-400' : 'hover:bg-gray-200'}`}
-                >
-                    <img src={thumb} alt={`Page ${index + 1}`} className="w-full rounded shadow-sm" />
-                    <p className="text-center text-xs mt-1 text-gray-600">{index + 1}</p>
-                </div>
-            ))}
-        </div>
-    );
-};
-
-const PdfViewer: React.FC<{ pdfDoc: PDFDocumentProxy, currentPage: number, scale: number, rotation: number }> = ({ pdfDoc, currentPage, scale, rotation }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+        }
+    }, [pdfDocument, rotation]);
 
     useEffect(() => {
-        const renderPage = async () => {
-            if (!canvasRef.current) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '1', 10);
+                        setCurrentPage(pageNum);
+                    }
+                });
+            },
+            { root: pdfContainerRef.current, rootMargin: '-50% 0px -50% 0px' }
+        );
 
-            const page = await pdfDoc.getPage(currentPage);
-            const viewport = page.getViewport({ scale, rotation });
-            const canvas = canvasRef.current;
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            
-            if (context) {
-                // FIX: The TypeScript error indicates that the `RenderParameters` type requires a `canvas` property. This might be due to a project-specific type definition or a version mismatch.
-                page.render({ canvasContext: context, viewport: viewport, canvas: canvas });
-            }
-        };
-        renderPage();
-    }, [pdfDoc, currentPage, scale, rotation]);
-
-    return (
-        <div className="flex-1 bg-gray-100 flex items-center justify-center p-4 overflow-auto min-w-0">
-            <canvas ref={canvasRef} className="shadow-lg" />
-        </div>
-    );
-};
-
-
-const ChatPanel: React.FC<{
-    chatHistory: ChatMessage[];
-    isReplying: boolean;
-    onSendMessage: (message: string) => void;
-}> = ({ chatHistory, isReplying, onSendMessage }) => {
-    const [input, setInput] = useState('');
-    const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
-    const [showScrollButton, setShowScrollButton] = useState(false);
-
-    const chatContainerRef = useRef<HTMLDivElement>(null);
-    const chatEndRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    const handleCopy = (text: string, index: number) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setCopiedMessageIndex(index);
-            setTimeout(() => {
-                setCopiedMessageIndex(null);
-            }, 2000);
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
+        const currentRefs = pageRefs.current;
+        currentRefs.forEach((page) => {
+            if (page) observer.observe(page);
         });
+
+        return () => {
+            currentRefs.forEach((page) => {
+                if (page) observer.unobserve(page);
+            });
+        };
+    }, [thumbnails]); // Rerun when pages are rendered
+
+    const handleFitToPage = useCallback(async () => {
+        const optimalScale = await calculateOptimalScale();
+        setScale(optimalScale);
+        setZoomLabel('Auto');
+    }, [calculateOptimalScale]);
+
+    const handleScaleChange = (newScale: number) => {
+        setScale(newScale);
+        setZoomLabel(`${Math.round(newScale * 100)}%`);
     };
 
-    const handleFormSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (input.trim() && !isReplying) {
-            onSendMessage(input.trim());
-            setInput('');
-            if (textareaRef.current) {
-                textareaRef.current.style.height = 'auto';
+    useEffect(() => {
+        setNumPages(pdfDocument.numPages);
+        setRotation(0);
+
+        const generateThumbnails = async () => {
+            if (!pdfDocument) return;
+            const thumbSrcs: string[] = [];
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            if (!tempCtx) return;
+
+            for (let i = 1; i <= pdfDocument.numPages; i++) {
+                const page = await pdfDocument.getPage(i);
+                const viewport = page.getViewport({ scale: 0.2 });
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+                
+                await page.render({ 
+                    canvasContext: tempCtx, 
+                    viewport: viewport,
+                    canvas: tempCanvas,
+                }).promise;
+                
+                thumbSrcs.push(tempCanvas.toDataURL('image/png'));
             }
+            setThumbnails(thumbSrcs);
+        };
+
+        generateThumbnails().then(() => {
+            handleFitToPage();
+        });
+    }, [pdfDocument, handleFitToPage]);
+
+    useEffect(() => {
+        renderAllPages(scale);
+    }, [scale, rotation, renderAllPages]);
+
+    const handleThumbnailClick = (pageNumber: number) => {
+        const pageElement = pageRefs.current[pageNumber - 1];
+        if (pageElement) {
+            pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     };
-
-    const handleScroll = useCallback(() => {
-        if (chatContainerRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-            setShowScrollButton(scrollHeight - scrollTop - clientHeight > 200);
-        }
-    }, []);
-
-    const scrollToBottom = useCallback(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, []);
     
-    useEffect(() => {
-        const container = chatContainerRef.current;
-        container?.addEventListener('scroll', handleScroll);
-        return () => container?.removeEventListener('scroll', handleScroll);
-    }, [handleScroll]);
-
-    useEffect(() => {
-        if (!showScrollButton) {
-            scrollToBottom();
-        }
-    }, [chatHistory, showScrollButton, scrollToBottom]);
-
-    const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setInput(e.target.value);
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            const scrollHeight = textareaRef.current.scrollHeight;
-            if (scrollHeight > 160) { // max-h-40
-                 textareaRef.current.style.height = '160px';
-            } else {
-                 textareaRef.current.style.height = `${scrollHeight}px`;
-            }
-        }
+    const handleMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault();
+        isResizingRef.current = true;
     };
 
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizingRef.current || !resizerRef.current) return;
+        
+        const parent = resizerRef.current.parentElement;
+        if (!parent) return;
+
+        const parentRect = parent.getBoundingClientRect();
+        const newChatWidth = parentRect.right - e.clientX;
+        const minWidth = 400; 
+        const maxWidth = parentRect.width * 0.7;
+
+        if (newChatWidth > minWidth && newChatWidth < maxWidth) {
+            setChatWidth(newChatWidth);
+        }
+    }, []);
+
+    const handleMouseUp = useCallback(() => {
+        isResizingRef.current = false;
+    }, []);
+
+    useEffect(() => {
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (zoomDropdownRef.current && !zoomDropdownRef.current.contains(event.target as Node)) {
+                setIsZoomOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [handleMouseMove, handleMouseUp]);
+
+    useEffect(() => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [chatHistory, isReplying]);
+
+    const handleSendMessage = (msg: string) => {
+        if (msg.trim() === '' || isReplying) return;
+        onSendMessage(msg.trim());
+        setMessage('');
+    };
+
+    const handleCopy = (text: string) => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const isSummaryStillLoading = chatHistory.length === 1 && chatHistory[0].role === 'model' && isReplying && chatHistory[0].text === '';
+    
+    const zoomLevels = [
+        { label: 'Auto Fit', action: handleFitToPage },
+        { label: '75%', action: () => handleScaleChange(0.75) },
+        { label: '100%', action: () => handleScaleChange(1.0) },
+        { label: '120%', action: () => handleScaleChange(1.2) },
+        { label: '150%', action: () => handleScaleChange(1.5) },
+        { label: '200%', action: () => handleScaleChange(2.0) },
+        { label: '300%', action: () => handleScaleChange(3.0) },
+    ];
 
     return (
-        <div className="w-full h-full bg-white p-4 flex flex-col border-l border-gray-200 relative">
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto mb-4 pr-2 space-y-4">
-                {chatHistory.map((msg, index) => (
-                   <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className="flex flex-col items-start max-w-md">
-                            <div className={`rounded-lg p-3 prose-xl max-w-none prose-headings:font-bold prose-p:leading-loose prose-li:leading-loose ${msg.role === 'user' ? 'bg-violet-500 text-white prose-invert' : 'bg-gray-50 text-gray-800'}`}>
-                               <Markdown>{msg.text}</Markdown>
-                            </div>
-                            {msg.role === 'model' && msg.text && (
-                                 <div className="mt-2 flex items-center space-x-3 text-gray-400">
-                                     <button onClick={() => handleCopy(msg.text, index)} className="flex items-center space-x-1 hover:text-violet-600 focus:outline-none transition-colors">
-                                        {copiedMessageIndex === index ? (
-                                            <>
-                                                <ClipboardIcon className="w-4 h-4 text-violet-500" />
-                                                <span className="text-xs text-violet-500">Copied!</span>
-                                            </>
-                                        ) : (
-                                            <CopyIcon className="w-4 h-4" />
-                                        )}
-                                     </button>
-                                     <button className="hover:text-violet-600 focus:outline-none transition-colors">
-                                         <ThumbsUpIcon className="w-4 h-4" />
-                                     </button>
-                                     <button className="hover:text-violet-600 focus:outline-none transition-colors">
-                                         <ThumbsDownIcon className="w-4 h-4" />
-                                     </button>
-                                 </div>
-                            )}
-                        </div>
+        <div className="w-full h-full flex bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+            <div 
+                ref={thumbnailsContainerRef}
+                className="w-28 flex-shrink-0 bg-gray-50 border-r border-gray-200 p-2 overflow-y-auto"
+            >
+                {thumbnails.map((src, index) => (
+                    <div
+                        key={`thumb-${index}`}
+                        className={`p-1 rounded-md cursor-pointer mb-2 transition-all ${currentPage === index + 1 ? 'border-2 border-violet-500 bg-violet-100' : 'border border-gray-300 hover:border-violet-400'}`}
+                        onClick={() => handleThumbnailClick(index + 1)}
+                    >
+                        <img src={src} alt={`Page ${index + 1}`} className="w-full h-auto rounded-sm shadow-sm" />
+                        <p className="text-center text-xs mt-1 text-gray-600">{index + 1}</p>
                     </div>
                 ))}
-                
-                {chatHistory.length === 1 && chatHistory[0].role === 'model' && !isReplying && (
-                    <div className="flex justify-start pt-2">
-                        <button
-                            onClick={() => onSendMessage('요약의 내용을 조금 더 정리해줘')}
-                            className="text-sm text-gray-700 font-medium bg-white border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-colors"
-                        >
-                            요약의 내용을 조금 더 정리해줘
-                        </button>
-                    </div>
-                )}
+            </div>
+            
+            <div className="flex-1 flex min-w-0">
+                <div className="flex-1 flex flex-col bg-gray-100 overflow-hidden">
+                    <div className="flex items-center justify-between p-2 bg-white border-b border-gray-200">
+                        <span className="text-sm font-medium text-gray-700 truncate px-2" title={pdfFile.name}>
+                            {pdfFile.name}
+                        </span>
+                        <div className="flex items-center space-x-2">
+                             <a href={pdfFile.url} download={pdfFile.name} className="p-2 rounded-md hover:bg-gray-100 text-gray-500" title="Download"><DownloadIcon className="w-5 h-5"/></a>
+                             
+                             <div ref={zoomDropdownRef} className="relative">
+                                <button onClick={() => setIsZoomOpen(!isZoomOpen)} className="px-3 py-1.5 text-xs font-semibold rounded-md hover:bg-gray-100 text-gray-700 border border-gray-300 flex items-center">
+                                    <span>{zoomLabel}</span>
+                                    <svg className="w-4 h-4 ml-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                </button>
+                                {isZoomOpen && (
+                                    <div className="absolute top-full right-0 mt-1 w-28 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                                        <ul>
+                                            {zoomLevels.map(level => (
+                                                <li key={level.label}>
+                                                    <button 
+                                                        onClick={() => { level.action(); setIsZoomOpen(false); }}
+                                                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                                                    >
+                                                        {level.label}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                             </div>
 
-                {(isReplying && chatHistory[chatHistory.length - 1]?.text === '') && (
-                     <div className="flex justify-start">
-                        <div className="bg-gray-50 text-gray-800 rounded-lg p-3">
-                           <div className="flex items-center space-x-2">
-                                <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></div>
-                                <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse delay-75"></div>
-                                <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse delay-150"></div>
+                             <button onClick={() => setRotation(r => (r + 90) % 360)} className="p-2 rounded-md hover:bg-gray-100 text-gray-500" title="Rotate"><RotateCwIcon className="w-5 h-5"/></button>
+                        </div>
+                    </div>
+                    <div 
+                        ref={pdfContainerRef}
+                        className="flex-1 overflow-auto p-4 flex flex-col items-center bg-gray-50"
+                    >
+                        {/* Pages will be rendered here */}
+                    </div>
+                </div>
+
+                <div
+                    ref={resizerRef}
+                    className="w-1.5 cursor-col-resize bg-gray-200 hover:bg-violet-400 transition-colors flex-shrink-0"
+                    onMouseDown={handleMouseDown}
+                />
+                <div 
+                    className={`flex flex-col border-l border-gray-200 flex-shrink-0 ${chatWidth === null ? 'flex-1' : ''}`}
+                    style={{ width: chatWidth !== null ? `${chatWidth}px` : undefined }}
+                >
+                    <div ref={chatContainerRef} className="flex-1 p-6 space-y-6 overflow-y-auto">
+                       {chatHistory.map((chat, index) => (
+                        <div key={index} className={`flex items-start gap-3 ${chat.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            {chat.role === 'model' && <LogoIcon className="w-8 h-8 rounded-full flex-shrink-0" />}
+                            <div className={`max-w-xl ${chat.role === 'user' ? 'bg-[#E2E3E5] text-gray-900 rounded-xl rounded-br-none' : ''}`}>
+                                { (index === 0 && isSummaryStillLoading) ? (
+                                    <div className="bg-gray-50 p-4 rounded-lg scanner-effect">
+                                        <h2 className="text-lg font-semibold text-gray-800 mb-4">{t('preparingSummary')}</h2>
+                                        <SummarySkeleton />
+                                    </div>
+                                ) : (
+                                    <div className={`p-4 rounded-xl ${chat.role === 'user' ? '' : 'bg-[#E2E3E5] text-gray-800 rounded-tl-none animate-fade-in'}`}>
+                                        <div className={commonProseClasses}>
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    h1: ({node, children, ...props}) => {
+                                                        const isSummaryTitle = index === 0 && chat.role === 'model' && node.position?.start.line === 1;
+                                                        if (isSummaryTitle) {
+                                                            return (
+                                                                <h1 {...props}>
+                                                                    <span className="flex items-center">
+                                                                        <SummaryIcon className="w-6 h-6 mr-2 flex-shrink-0" />
+                                                                        {children}
+                                                                    </span>
+                                                                </h1>
+                                                            );
+                                                        }
+                                                        return <h1 {...props}>{children}</h1>;
+                                                    },
+                                                }}
+                                            >
+                                                {chat.text}
+                                            </ReactMarkdown>
+                                        </div>
+                                        {chat.role === 'model' && chat.text && (!isReplying || index < chatHistory.length - 1) && (
+                                            <div className="flex items-center space-x-2 mt-3 text-gray-400">
+                                                <button className="hover:text-gray-600 transition-colors"><ThumbsUpIcon className="w-4 h-4" /></button>
+                                                <button className="hover:text-gray-600 transition-colors"><ThumbsDownIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => handleCopy(chat.text)} className="hover:text-gray-600 relative transition-colors">
+                                                    <CopyIcon className="w-4 h-4" />
+                                                    {copied && <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-xs bg-gray-700 text-white px-2 py-0.5 rounded">{t('copied')}</span>}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                       ))}
+                       {isReplying && !isSummaryStillLoading && (
+                            <div className="flex justify-start items-start">
+                                 <LogoIcon className="w-8 h-8 rounded-full flex-shrink-0 mr-3" />
+                                 <div className="bg-gray-100 p-4 rounded-lg rounded-tl-none flex items-center space-x-2">
+                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse"></div>
+                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
+                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 border-t border-gray-200 bg-[#E2E3E5]">
+                         {!isReplying && chatHistory.length > 0 && chatHistory[0]?.text && (
+                            <div className="flex space-x-2 mb-2">
+                                 <button onClick={() => handleSendMessage(t('refineSummary'))} className="flex items-center text-sm bg-black/5 hover:bg-black/10 text-gray-700 px-3 py-1.5 rounded-lg transition-colors">
+                                    <SparklesIcon className="w-4 h-4 mr-2 text-violet-400" />
+                                    {t('refineSummary')}
+                                </button>
+                            </div>
+                         )}
+                        <div className="relative">
+                            <textarea
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSendMessage(message);
+                                    }
+                                }}
+                                placeholder={t('askAnything')}
+                                className="w-full p-3 pr-14 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-[#E2E3E5] text-gray-900 placeholder-gray-500"
+                                rows={1}
+                                disabled={isReplying}
+                            />
+                             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+                                 <button onClick={() => handleSendMessage(message)} disabled={!message.trim() || isReplying} className="p-2 rounded-full bg-violet-500 text-white hover:bg-violet-600 disabled:bg-violet-300 disabled:cursor-not-allowed transition-colors">
+                                    <SendIcon className="w-5 h-5" />
+                                </button>
                             </div>
                         </div>
                     </div>
-                )}
-                <div ref={chatEndRef} />
-            </div>
-
-            {showScrollButton && (
-                <button 
-                    onClick={scrollToBottom} 
-                    className="absolute bottom-24 right-6 w-9 h-9 bg-white border border-gray-300 rounded-full flex items-center justify-center shadow-md hover:bg-gray-100 transition-colors z-10"
-                    aria-label="Scroll to bottom"
-                >
-                    <ArrowDownIcon className="w-5 h-5 text-gray-600" />
-                </button>
-            )}
-
-            <div className="border-t pt-4">
-                <form onSubmit={handleFormSubmit}>
-                    <div className="relative border border-gray-300 rounded-lg p-2 flex items-end bg-white focus-within:ring-2 focus-within:ring-violet-500">
-                        <textarea
-                            ref={textareaRef}
-                            value={input}
-                            onChange={handleInput}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleFormSubmit(e as any);
-                                }
-                            }}
-                            placeholder="아무것이나 물어보세요..."
-                            className="flex-1 resize-none border-none bg-transparent focus:ring-0 focus:outline-none p-0 leading-tight text-black"
-                            rows={1}
-                            style={{maxHeight: '10rem'}}
-                            disabled={isReplying}
-                        />
-                        <button 
-                            type="submit"
-                            className="self-end ml-2 p-2 rounded-full bg-violet-500 text-white hover:bg-violet-600 disabled:bg-gray-300 transition-colors flex-shrink-0"
-                            disabled={!input.trim() || isReplying}
-                        >
-                            <SendIcon className="w-5 h-5" />
-                        </button>
-                    </div>
-                </form>
-                <div className="flex justify-end items-center space-x-1 mt-2">
-                    <div className="group relative">
-                        <button type="button" className="p-2 rounded-full hover:bg-gray-100 transition-colors" onClick={() => alert('통화 기능이 곧 제공될 예정입니다.')}>
-                            <PhoneIcon className="w-5 h-5 text-gray-500" />
-                        </button>
-                         <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium rounded py-1 px-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                            통화
-                            <div className="absolute top-full left-1/2 -ml-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                        </div>
-                    </div>
-                    <div className="group relative">
-                        <button type="button" className="p-2 rounded-full hover:bg-gray-100 transition-colors" onClick={() => alert('음성 입력 기능이 곧 제공될 예정입니다.')}>
-                            <MicrophoneIcon className="w-5 h-5 text-gray-500" />
-                        </button>
-                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium rounded py-1 px-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                            음성 입력
-                            <div className="absolute top-full left-1/2 -ml-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                        </div>
-                    </div>
-                    <div className="group relative">
-                        <button type="button" className="p-2 rounded-full hover:bg-gray-100 transition-colors" onClick={() => alert('확장 기능이 곧 제공될 예정입니다.')}>
-                            <ExpandIcon className="w-5 h-5 text-gray-500" />
-                        </button>
-                         <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium rounded py-1 px-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                            확장
-                            <div className="absolute top-full left-1/2 -ml-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-const ChatView: React.FC<ChatViewProps> = (props) => {
-    const [currentPage, setCurrentPage] = useState(1);
-    const [scale, setScale] = useState(0.75);
-    const [rotation, setRotation] = useState(0);
-
-    return (
-        <div className="w-full h-full bg-white rounded-lg shadow-xl flex flex-col overflow-hidden">
-            <header className="flex items-center justify-between p-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-                <div className="flex-1">
-                    <h2 className="text-sm font-medium truncate ml-2 text-gray-900">{props.pdfFile.name}</h2>
-                </div>
-                <div className="flex items-center space-x-2 text-gray-900">
-                     <span className="text-sm">{currentPage} / {props.pdfDocument.numPages}</span>
-                    <button onClick={() => setScale(s => Math.max(0.25, s - 0.1))} className="p-2 rounded hover:bg-gray-200"><ZoomOutIcon className="w-5 h-5" /></button>
-                     <span className="text-sm">{Math.round(scale * 100)}%</span>
-                    <button onClick={() => setScale(s => Math.min(3, s + 0.1))} className="p-2 rounded hover:bg-gray-200"><ZoomInIcon className="w-5 h-5" /></button>
-                    <div className="border-l h-5 mx-2 border-gray-300"></div>
-                    <button onClick={() => setRotation(r => (r - 90) % 360)} className="p-2 rounded hover:bg-gray-200"><RotateCcwIcon className="w-5 h-5" /></button>
-                    <button onClick={() => setRotation(r => (r + 90) % 360)} className="p-2 rounded hover:bg-gray-200"><RotateCwIcon className="w-5 h-5" /></button>
-                    <div className="border-l h-5 mx-2 border-gray-300"></div>
-                    <button className="p-2 rounded hover:bg-gray-200"><DownloadIcon className="w-5 h-5" /></button>
-                </div>
-                <div className="flex-1"></div>
-            </header>
-            <div className="flex flex-1 overflow-hidden">
-                <PdfThumbnails pdfDoc={props.pdfDocument} onPageSelect={setCurrentPage} currentPage={currentPage} />
-                <PdfViewer pdfDoc={props.pdfDocument} currentPage={currentPage} scale={scale} rotation={rotation}/>
-                <div className={"w-full md:w-2/5 xl:w-1/3"}>
-                    <ChatPanel {...props} />
                 </div>
             </div>
         </div>

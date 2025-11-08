@@ -1,15 +1,64 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import UploadView from './components/UploadView';
 import ProcessingView from './components/ProcessingView';
 import ChatView from './components/ChatView';
-import { AppState, PdfFile, ChatMessage } from './types';
-import { getSummaryStream, getChatStream } from './services/geminiService';
+import TranslationView from './components/TranslationView';
+import AuthView from './components/AuthView';
+import { AppState, PdfFile, ChatMessage, getTranslator, RecentFile, ActiveTool } from './types';
+import { getSummaryStream, getChatStream, getTranslationStream } from './services/geminiService';
+import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { supabase } from './lib/supabaseClient';
+import type { Session } from '@supabase/supabase-js';
 
-// pdfjs-dist worker
-declare const pdfjsLib: any;
+// Configure the PDF.js worker to resolve startup errors.
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://aistudiocdn.com/pdfjs-dist@5.4.394/build/pdf.worker.mjs';
+
+
+// --- IndexedDB Helpers ---
+const DB_NAME = 'PDF_FILES_DB';
+const STORE_NAME = 'pdf_files_store';
+const DB_VERSION = 1;
+
+const openDB = (): Promise<IDBDatabase> => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME, { keyPath: 'name' });
+            }
+        };
+        request.onsuccess = (event) => resolve((event.target as IDBOpenDBRequest).result);
+        request.onerror = (event) => reject('Error opening DB: ' + (event.target as IDBOpenDBRequest).error);
+    });
+};
+
+const saveFileToDB = async (file: File) => {
+    const db = await openDB();
+    return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put({ name: file.name, file });
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error saving file: ' + (event.target as IDBRequest).error);
+    });
+};
+
+const getFileFromDB = async (fileName: string): Promise<File | null> => {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(fileName);
+        request.onsuccess = (event) => {
+            const result = (event.target as IDBRequest).result;
+            resolve(result?.file as File | null);
+        };
+        request.onerror = (event) => reject('Error getting file: ' + (event.target as IDBRequest).error);
+    });
+};
 
 const App: React.FC = () => {
     const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -20,6 +69,65 @@ const App: React.FC = () => {
     const [isReplying, setIsReplying] = useState(false);
     const [targetLanguage, setTargetLanguage] = useState<string>('한국어');
     const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+    const [fontClass, setFontClass] = useState('font-custom-kr');
+    const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+    const [activeTool, setActiveTool] = useState<ActiveTool>('home');
+    const [translatedText, setTranslatedText] = useState<string>('');
+    const [isTranslating, setIsTranslating] = useState(false);
+    const [session, setSession] = useState<Session | null>(null);
+    
+    const t = getTranslator(targetLanguage);
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+             if (_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') {
+                setActiveTool('home');
+                if (_event === 'SIGNED_OUT') {
+                    resetState();
+                }
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (['한국어', '日本語', '中文'].includes(targetLanguage)) {
+            setFontClass('font-custom-kr');
+        } else {
+            setFontClass('font-custom-en');
+        }
+    }, [targetLanguage]);
+
+    useEffect(() => {
+        try {
+            const storedFiles = localStorage.getItem('recentPdfFiles');
+            if (storedFiles) {
+                setRecentFiles(JSON.parse(storedFiles));
+            }
+        } catch (error) {
+            console.error('Failed to load recent files from localStorage:', error);
+            setRecentFiles([]);
+        }
+    }, []);
+
+    const updateRecentFiles = (newFile: RecentFile) => {
+        setRecentFiles(prevFiles => {
+            const otherFiles = prevFiles.filter(f => f.name !== newFile.name);
+            const updatedFiles = [newFile, ...otherFiles].slice(0, 20); // Limit to 20
+            try {
+                localStorage.setItem('recentPdfFiles', JSON.stringify(updatedFiles));
+            } catch (error) {
+                console.error('Failed to save recent files to localStorage:', error);
+            }
+            return updatedFiles;
+        });
+    };
 
     const resetState = useCallback(() => {
         setAppState(AppState.IDLE);
@@ -29,10 +137,13 @@ const App: React.FC = () => {
         setChatHistory([]);
         setIsReplying(false);
         setPdfDocument(null);
+        setTranslatedText('');
+        setIsTranslating(false);
     }, []);
 
     const handleNewChat = useCallback(() => {
         resetState();
+        setActiveTool('home');
     }, [resetState]);
 
     const handleLanguageChange = useCallback((language: string) => {
@@ -41,13 +152,39 @@ const App: React.FC = () => {
 
     const handleCancelProcessing = useCallback(() => {
         resetState();
+        setActiveTool('home');
     }, [resetState]);
 
-    const startSummaryGeneration = useCallback(async (fullText: string, language: string) => {
+    const handleTranslate = useCallback(async (textToTranslate: string, language: string) => {
+        setIsTranslating(true);
+        setTranslatedText('');
+        let fullTranslation = '';
+        try {
+            const stream = await getTranslationStream(textToTranslate, language);
+            const reader = stream.getReader();
+            const decoder = new TextDecoder();
+            
+            while(true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                fullTranslation += decoder.decode(value, { stream: true });
+                setTranslatedText(fullTranslation);
+            }
+
+        } catch (error) {
+            console.error('Error getting translation:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            setTranslatedText(t('chatError', { error: errorMessage }));
+        } finally {
+            setIsTranslating(false);
+        }
+    }, [t]);
+
+    const startSummaryGeneration = useCallback(async (fullText: string, language: string, fileName: string) => {
         setIsReplying(true);
         let summary = '';
         try {
-            const stream = await getSummaryStream(fullText, language);
+            const stream = await getSummaryStream(fullText, language, fileName);
             const reader = stream.getReader();
             const decoder = new TextDecoder();
 
@@ -65,35 +202,72 @@ const App: React.FC = () => {
             const errorMessage = error instanceof Error ? error.message : String(error);
             setChatHistory([{
                 role: 'model',
-                text: `죄송합니다, 요약을 생성하는 중에 오류가 발생했습니다.\n\n**오류:** ${errorMessage}`
+                text: t('summaryError', { error: errorMessage })
             }]);
         } finally {
             setIsReplying(false);
         }
-    }, []);
+    }, [t]);
 
     const handleFileUpload = useCallback(async (file: File) => {
         if (file.type !== 'application/pdf') {
-            alert('PDF 파일만 업로드할 수 있습니다.');
+            alert(t('pdfOnly'));
             return;
         }
         
         resetState();
+        const currentTool = activeTool; // Capture tool at time of upload
         setAppState(AppState.PROCESSING);
         setPdfFile({ name: file.name, url: URL.createObjectURL(file) });
         setProcessingProgress(0);
 
         try {
+            await saveFileToDB(file);
             const arrayBuffer = await file.arrayBuffer();
-            
             setProcessingProgress(5);
-            const loadingTask = pdfjsLib.getDocument(arrayBuffer);
 
-            loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
-                setProcessingProgress(5 + Math.round((loaded / total) * 25));
+            const loadPdfDocument = async (password?: string): Promise<PDFDocumentProxy> => {
+                const loadingTask = pdfjsLib.getDocument({
+                    data: arrayBuffer,
+                    ...(password && { password }),
+                });
+
+                loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
+                    setProcessingProgress(5 + Math.round((loaded / total) * 25));
+                };
+                
+                return loadingTask.promise;
             };
 
-            const pdf = await loadingTask.promise;
+            let pdf: PDFDocumentProxy;
+
+            try {
+                pdf = await loadPdfDocument();
+            } catch (error: any) {
+                if (error.name === 'PasswordException') {
+                    const password = prompt(t('passwordRequired'));
+                    if (password) {
+                        try {
+                            pdf = await loadPdfDocument(password);
+                        } catch (innerError: any) {
+                            if (innerError.name === 'PasswordException') {
+                                alert(t('incorrectPassword'));
+                            } else {
+                                throw innerError;
+                            }
+                            resetState();
+                            return;
+                        }
+                    } else {
+                        alert(t('passwordCancelled'));
+                        resetState();
+                        return;
+                    }
+                } else {
+                    throw error;
+                }
+            }
+
             setPdfDocument(pdf);
             setProcessingProgress(30);
 
@@ -105,7 +279,7 @@ const App: React.FC = () => {
                 const textContent = await page.getTextContent();
                 
                 if (textContent.items.length > 0) {
-                     const pageText = textContent.items.map((item: any) => item.str).join(' ');
+                     const pageText = textContent.items.map((item: any) => 'str' in item ? item.str : '').join(' ');
                      fullText += pageText + '\n\n';
                 }
                 
@@ -115,14 +289,42 @@ const App: React.FC = () => {
             setDocumentText(fullText);
             setAppState(AppState.CHAT);
             
-            startSummaryGeneration(fullText, targetLanguage);
+            const newRecentFile: RecentFile = {
+                name: file.name,
+                size: file.size,
+                lastModified: file.lastModified,
+            };
+            updateRecentFiles(newRecentFile);
+
+            if (currentTool === 'translate') {
+                handleTranslate(fullText, targetLanguage);
+            } else {
+                setActiveTool('home');
+                startSummaryGeneration(fullText, targetLanguage, file.name);
+            }
 
         } catch (error) {
             console.error('Error processing PDF:', error);
-            alert(`PDF 파일을 처리하는 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            alert(t('pdfProcessError', { error: errorMessage }));
             resetState();
         }
-    }, [targetLanguage, resetState, startSummaryGeneration]);
+    }, [targetLanguage, resetState, startSummaryGeneration, t, activeTool, handleTranslate]);
+    
+    const handleRecentFileClick = async (fileName: string) => {
+        try {
+            const file = await getFileFromDB(fileName);
+            if (file) {
+                await handleFileUpload(file);
+            } else {
+                alert(`Could not find "${fileName}" in the local database. Please upload it again.`);
+            }
+        } catch (error) {
+            console.error("Error loading recent file:", error);
+            alert("An error occurred while trying to load the recent file.");
+        }
+    };
+
 
     const handleSendMessage = useCallback(async (message: string) => {
         if (!documentText) return;
@@ -157,7 +359,7 @@ const App: React.FC = () => {
             }
         } catch (error) {
             console.error('Error sending message:', error);
-            const errorMessage = `죄송합니다, 답변을 생성하는 중에 오류가 발생했습니다. API 키 또는 네트워크 연결을 확인해주세요.`;
+            const errorMessage = t('chatError');
             setChatHistory(prev => {
                 const latestHistory = [...prev];
                 latestHistory[latestHistory.length - 1].text = errorMessage;
@@ -166,9 +368,16 @@ const App: React.FC = () => {
         } finally {
             setIsReplying(false);
         }
-    }, [chatHistory, documentText, targetLanguage]);
-    
+    }, [chatHistory, documentText, targetLanguage, t]);
+
     const renderContent = () => {
+        if (activeTool === 'auth') {
+            return <AuthView />;
+        }
+        if (activeTool !== 'home' && appState === AppState.IDLE) {
+            return <UploadView onFileUpload={handleFileUpload} language={targetLanguage} />;
+        }
+
         switch (appState) {
             case AppState.PROCESSING:
                 return (
@@ -176,10 +385,24 @@ const App: React.FC = () => {
                         fileName={pdfFile?.name || ''}
                         progress={processingProgress}
                         onCancel={handleCancelProcessing}
+                        language={targetLanguage}
                     />
                 );
             case AppState.CHAT:
                  if (!pdfFile || !pdfDocument) return null;
+                 if (activeTool === 'translate') {
+                    return (
+                        <TranslationView
+                            pdfFile={pdfFile}
+                            originalText={documentText}
+                            translatedText={translatedText}
+                            isTranslating={isTranslating}
+                            onTranslate={(lang) => handleTranslate(documentText, lang)}
+                            targetLanguage={targetLanguage}
+                            onLanguageChange={handleLanguageChange}
+                        />
+                    );
+                 }
                 return (
                     <ChatView
                         pdfDocument={pdfDocument}
@@ -187,22 +410,28 @@ const App: React.FC = () => {
                         chatHistory={chatHistory}
                         isReplying={isReplying}
                         onSendMessage={handleSendMessage}
+                        language={targetLanguage}
                     />
                 );
             case AppState.IDLE:
             default:
-                return <UploadView onFileUpload={handleFileUpload} />;
+                return <UploadView onFileUpload={handleFileUpload} language={targetLanguage} />;
         }
     };
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans">
+        <div className={`flex h-screen bg-gray-50 ${fontClass}`}>
             <Sidebar
                 onNewChat={handleNewChat}
                 targetLanguage={targetLanguage}
                 onLanguageChange={handleLanguageChange}
+                recentFiles={recentFiles}
+                onRecentFileClick={handleRecentFileClick}
+                activeTool={activeTool}
+                onToolSelect={setActiveTool}
+                session={session}
             />
-            <main className="flex-1 flex items-center justify-center p-4 lg:p-8 overflow-hidden">
+            <main className="flex-1 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">
                 {renderContent()}
             </main>
         </div>

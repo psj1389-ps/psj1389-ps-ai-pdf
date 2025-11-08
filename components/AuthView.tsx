@@ -1,30 +1,32 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { LogoIcon } from './icons';
+import { getTranslator } from '../types';
 
 const AuthView: React.FC = () => {
     const [loading, setLoading] = useState(false);
-    const [email, setEmail] = useState('');
     const [message, setMessage] = useState('');
+    // A dummy language state for the translator, as this view is standalone.
+    const t = getTranslator('한국어');
 
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setMessage('');
+    const handleGoogleLogin = async () => {
         setLoading(true);
+        setMessage('');
         try {
-            const { error } = await supabase.auth.signInWithOtp({ email });
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+            });
             if (error) {
                 setMessage(`오류: ${error.message}`);
-            } else {
-                setMessage('이메일을 확인하여 로그인 링크를 클릭하세요!');
+                setLoading(false);
             }
+            // On success, Supabase handles the redirect, so we don't need to setLoading(false) here.
         } catch(e) {
              if (e instanceof Error) {
                 setMessage(`클라이언트 오류: ${e.message}. Supabase 환경 변수가 올바르게 설정되었는지 확인하세요.`);
             } else {
                 setMessage('알 수 없는 오류가 발생했습니다.');
             }
-        } finally {
             setLoading(false);
         }
     };
@@ -37,29 +39,19 @@ const AuthView: React.FC = () => {
                     <h1 className="text-5xl font-bold text-gray-800">77-tools PDF</h1>
                 </div>
                 <div className="bg-white p-8 rounded-2xl shadow-md border border-gray-200">
-                    <h2 className="text-2xl font-semibold mb-2 text-gray-700">로그인 또는 가입</h2>
-                    <p className="text-gray-500 mb-6">이메일로 매직 링크를 받아 시작하세요.</p>
-                    <form onSubmit={handleLogin}>
-                        <input
-                            type="email"
-                            placeholder="your@email.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                            required
-                        />
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-violet-500 text-white rounded-lg h-12 text-lg font-semibold hover:bg-violet-600 transition-colors shadow-md disabled:bg-violet-300 disabled:cursor-not-allowed"
-                        >
-                            {loading ? '전송 중...' : '매직 링크 받기'}
-                        </button>
-                    </form>
-                    {message && <p className="mt-4 text-sm text-center text-gray-600">{message}</p>}
+                    <h2 className="text-2xl font-semibold mb-2 text-gray-700">{t('authTitle')}</h2>
+                    <p className="text-gray-500 mb-6">{/* Description removed for cleaner UI */}</p>
+                    <button
+                        onClick={handleGoogleLogin}
+                        disabled={loading}
+                        className="w-full bg-violet-500 text-white rounded-lg h-12 text-lg font-semibold hover:bg-violet-600 transition-colors shadow-md disabled:bg-violet-300 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                        {loading ? '전송 중...' : t('authGoogle')}
+                    </button>
+                    {message && <p className="mt-4 text-sm text-center text-red-500">{message}</p>}
                 </div>
                  <p className="text-xs text-gray-400 mt-4">
-                    과거 대화 내용을 저장하고 불러오려면 로그인하세요.
+                    {t('authFooter')}
                 </p>
             </div>
         </div>
