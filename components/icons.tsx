@@ -218,3 +218,9 @@ export const ConvertIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
         <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 17v-2a2 2 0 0 0-2-2H8"/><path d="m12 11-2-2 2-2"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/><path d="m18 7 3-3-3-3"/>
     </svg>
 );
+
+export const PencilIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+    </svg>
+);

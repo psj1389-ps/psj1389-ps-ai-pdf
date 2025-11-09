@@ -11,7 +11,8 @@ import {
     ThumbsUpIcon,
     ThumbsDownIcon,
     CopyIcon,
-    SummarizeIcon
+    SummarizeIcon,
+    PencilIcon
 } from './icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,6 +24,7 @@ interface ChatViewProps {
     isReplying: boolean;
     onSendMessage: (message: string) => void;
     language: string;
+    onRenameFile: (newName: string) => void;
 }
 
 const commonProseClasses = `
@@ -45,6 +47,7 @@ const ChatView: React.FC<ChatViewProps> = ({
     isReplying,
     onSendMessage,
     language,
+    onRenameFile,
 }) => {
     const [numPages, setNumPages] = useState(pdfDocument.numPages);
     const [scale, setScale] = useState(1.0);
@@ -56,6 +59,8 @@ const ChatView: React.FC<ChatViewProps> = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [isZoomOpen, setIsZoomOpen] = useState(false);
     const [zoomLabel, setZoomLabel] = useState('Auto');
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [editingName, setEditingName] = useState(pdfFile.name);
     
     const pdfContainerRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +71,10 @@ const ChatView: React.FC<ChatViewProps> = ({
     const zoomDropdownRef = useRef<HTMLDivElement>(null);
 
     const t = getTranslator(language);
+
+    useEffect(() => {
+        setEditingName(pdfFile.name);
+    }, [pdfFile.name]);
 
     const calculateOptimalScale = useCallback(async (): Promise<number> => {
         if (!pdfDocument || !pdfContainerRef.current) return 1.0;
@@ -196,6 +205,7 @@ const ChatView: React.FC<ChatViewProps> = ({
     }, [scale, rotation, renderAllPages]);
 
     const handleThumbnailClick = (pageNumber: number) => {
+        setCurrentPage(pageNumber); // Set active page immediately
         const pageElement = pageRefs.current[pageNumber - 1];
         if (pageElement) {
             pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -263,6 +273,24 @@ const ChatView: React.FC<ChatViewProps> = ({
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const handleRenameSubmit = () => {
+        const trimmedName = editingName.trim();
+        if (trimmedName && trimmedName !== pdfFile.name) {
+            const finalName = trimmedName.toLowerCase().endsWith('.pdf') ? trimmedName : `${trimmedName}.pdf`;
+            onRenameFile(finalName);
+        }
+        setIsRenaming(false);
+    };
+
+    const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleRenameSubmit();
+        } else if (e.key === 'Escape') {
+            setEditingName(pdfFile.name);
+            setIsRenaming(false);
+        }
+    };
+
     const isSummaryStillLoading = chatHistory.length === 1 && chatHistory[0].role === 'model' && isReplying && chatHistory[0].text === '';
     
     const zoomLevels = [
@@ -295,11 +323,30 @@ const ChatView: React.FC<ChatViewProps> = ({
             
             <div className="flex-1 flex min-w-0">
                 <div className="flex-1 flex flex-col bg-gray-100 overflow-hidden">
-                    <div className="flex items-center justify-between p-2 bg-white border-b border-gray-200">
-                        <span className="text-sm font-medium text-gray-700 truncate px-2" title={pdfFile.name}>
-                            {pdfFile.name}
-                        </span>
-                        <div className="flex items-center space-x-2">
+                    <div className="flex items-center justify-between p-2 bg-white border-b border-gray-200 gap-4">
+                        {isRenaming ? (
+                            <div className="flex-1 min-w-0">
+                                <input
+                                    type="text"
+                                    value={editingName}
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    onBlur={handleRenameSubmit}
+                                    onKeyDown={handleRenameKeyDown}
+                                    className="w-full text-sm font-medium text-gray-700 truncate px-2 py-1 bg-white border border-violet-300 rounded-md focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                    autoFocus
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1 flex-1 min-w-0">
+                                <span className="text-sm font-medium text-gray-700 truncate pl-2" title={pdfFile.name}>
+                                    {pdfFile.name}
+                                </span>
+                                <button onClick={() => setIsRenaming(true)} className="p-1 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 flex-shrink-0" title="Rename file">
+                                    <PencilIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                        <div className="flex items-center space-x-2 flex-shrink-0">
                              <a href={pdfFile.url} download={pdfFile.name} className="p-2 rounded-md hover:bg-gray-100 text-gray-500" title="Download"><DownloadIcon className="w-5 h-5"/></a>
                              
                              <div ref={zoomDropdownRef} className="relative">
@@ -342,7 +389,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                     onMouseDown={handleMouseDown}
                 />
                 <div 
-                    className={`flex flex-col border-l border-gray-200 flex-shrink-0 ${chatWidth === null ? 'flex-1' : ''}`}
+                    className={`flex flex-col border-l border-gray-200 flex-shrink-0 bg-white ${chatWidth === null ? 'flex-1' : ''}`}
                     style={{ width: chatWidth !== null ? `${chatWidth}px` : undefined }}
                 >
                     <div ref={chatContainerRef} className="flex-1 p-6 space-y-6 overflow-y-auto">
@@ -407,10 +454,10 @@ const ChatView: React.FC<ChatViewProps> = ({
                         )}
                     </div>
 
-                    <div className="p-4 border-t border-gray-200 bg-[#E2E3E5]">
+                    <div className="p-4 border-t border-gray-200 bg-white">
                          {!isReplying && chatHistory.length > 0 && chatHistory[0]?.text && (
                             <div className="flex space-x-2 mb-2">
-                                 <button onClick={() => handleSendMessage(t('refineSummary'))} className="flex items-center text-sm bg-black/5 hover:bg-black/10 text-gray-700 px-3 py-1.5 rounded-lg transition-colors">
+                                 <button onClick={() => handleSendMessage(t('refineSummary'))} className="flex items-center text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg transition-colors">
                                     <SparklesIcon className="w-4 h-4 mr-2 text-orange-400" />
                                     {t('refineSummary')}
                                 </button>
@@ -427,7 +474,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                                     }
                                 }}
                                 placeholder={t('askAnything')}
-                                className="w-full p-3 pr-14 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 bg-[#E2E3E5] text-gray-900 placeholder-gray-500"
+                                className="w-full p-3 pr-14 border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-gray-50 text-gray-900 placeholder-gray-500"
                                 rows={1}
                                 disabled={isReplying}
                             />

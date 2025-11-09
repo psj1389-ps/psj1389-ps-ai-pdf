@@ -60,6 +60,18 @@ const getFileFromDB = async (fileName: string): Promise<File | null> => {
     });
 };
 
+const deleteFileFromDB = async (fileName: string): Promise<void> => {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete(fileName);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject('Error deleting file: ' + (event.target as IDBRequest).error);
+    });
+};
+
+
 const App: React.FC = () => {
     const [appState, setAppState] = useState<AppState>(AppState.IDLE);
     const [pdfFile, setPdfFile] = useState<PdfFile | null>(null);
@@ -367,6 +379,54 @@ const App: React.FC = () => {
         }
     }, [chatHistory, documentText, uiLanguage, t]);
 
+    const handleRenameFile = async (newName: string) => {
+        if (!pdfFile || newName.trim() === '' || newName === pdfFile.name) {
+            return;
+        }
+    
+        const oldName = pdfFile.name;
+    
+        try {
+            const fileFromDB = await getFileFromDB(oldName);
+            if (!fileFromDB) {
+                console.error("Could not find file to rename in DB");
+                alert(`Could not find "${oldName}" in the local database.`);
+                return;
+            }
+    
+            const newFileObject = new File([fileFromDB], newName, {
+                type: fileFromDB.type,
+                lastModified: fileFromDB.lastModified,
+            });
+    
+            await saveFileToDB(newFileObject);
+            await deleteFileFromDB(oldName);
+    
+            setPdfFile(prev => prev ? { ...prev, name: newName } : null);
+    
+            const newRecentEntry: RecentFile = {
+                name: newName,
+                size: newFileObject.size,
+                lastModified: newFileObject.lastModified,
+            };
+    
+            setRecentFiles(prev => {
+                const otherFiles = prev.filter(f => f.name !== oldName);
+                const updated = [newRecentEntry, ...otherFiles].slice(0, 20);
+                try {
+                    localStorage.setItem('recentPdfFiles', JSON.stringify(updated));
+                } catch (error) {
+                    console.error('Failed to save recent files to localStorage:', error);
+                }
+                return updated;
+            });
+    
+        } catch (error) {
+            console.error("Error renaming file:", error);
+            alert("Failed to rename the file.");
+        }
+    };
+
     const renderContent = () => {
         if (activeTool === 'auth') {
             return <AuthView />;
@@ -409,6 +469,7 @@ const App: React.FC = () => {
                         isReplying={isReplying}
                         onSendMessage={handleSendMessage}
                         language={uiLanguage}
+                        onRenameFile={handleRenameFile}
                     />
                 );
             case AppState.IDLE:
