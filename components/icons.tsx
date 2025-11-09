@@ -161,23 +161,28 @@ export const LogoutIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 // --- New Icons for Redesigned Sidebar ---
 
 export const SummarizeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-        <polyline points="14 2 14 8 20 8" />
-        <path d="M8 12h8" />
-        <path d="M8 16h8" />
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <defs>
+            <linearGradient id="summarize-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#F97316"/>
+                <stop offset="1" stopColor="#D946EF"/>
+            </linearGradient>
+        </defs>
+        <g stroke="url(#summarize-gradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <path d="M8 12h8" />
+            <path d="M8 16h8" />
+        </g>
     </svg>
 );
 
 export const TranslateIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-        <path d="m5 8 6 6" />
-        <path d="m4 14 6-6 2-3" />
-        <path d="M2 5h12" />
-        <path d="M7 2h1" />
-        <path d="m18 18-3-3" />
-        <path d="M21 11h-3a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h3" />
-        <path d="M17 18v1a2 2 0 0 0 2 2h3" />
+        <path d="M14 12 L14.7 10 M18 10 h -5.5 M16 10 L12 22" />
+        <path d="M4 5h7" />
+        <path d="M7 5v13" />
+        <path d="m10 13-3 5-3-5" />
     </svg>
 );
 
@@ -205,5 +210,11 @@ export const CheckIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 export const ChevronDownIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
         <polyline points="6 9 12 15 18 9" />
+    </svg>
+);
+
+export const ConvertIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 17v-2a2 2 0 0 0-2-2H8"/><path d="m12 11-2-2 2-2"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/><path d="m18 7 3-3-3-3"/>
     </svg>
 );

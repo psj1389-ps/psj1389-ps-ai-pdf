@@ -67,7 +67,8 @@ const App: React.FC = () => {
     const [processingProgress, setProcessingProgress] = useState(0);
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [isReplying, setIsReplying] = useState(false);
-    const [targetLanguage, setTargetLanguage] = useState<string>('한국어');
+    const [uiLanguage, setUiLanguage] = useState<string>('한국어');
+    const [translationTargetLanguage, setTranslationTargetLanguage] = useState<string>('English');
     const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
     const [fontClass, setFontClass] = useState('font-custom-kr');
     const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
@@ -76,7 +77,7 @@ const App: React.FC = () => {
     const [isTranslating, setIsTranslating] = useState(false);
     const [session, setSession] = useState<Session | null>(null);
     
-    const t = getTranslator(targetLanguage);
+    const t = getTranslator(uiLanguage);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -97,12 +98,12 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (['한국어', '日本語', '中文'].includes(targetLanguage)) {
+        if (['한국어', '日本語', '中文'].includes(uiLanguage)) {
             setFontClass('font-custom-kr');
         } else {
             setFontClass('font-custom-en');
         }
-    }, [targetLanguage]);
+    }, [uiLanguage]);
 
     useEffect(() => {
         try {
@@ -145,10 +146,6 @@ const App: React.FC = () => {
         resetState();
         setActiveTool('home');
     }, [resetState]);
-
-    const handleLanguageChange = useCallback((language: string) => {
-        setTargetLanguage(language);
-    }, []);
 
     const handleCancelProcessing = useCallback(() => {
         resetState();
@@ -215,8 +212,9 @@ const App: React.FC = () => {
             return;
         }
         
-        resetState();
         const currentTool = activeTool; // Capture tool at time of upload
+        resetState();
+        setActiveTool(currentTool); // Restore the tool after reset
         setAppState(AppState.PROCESSING);
         setPdfFile({ name: file.name, url: URL.createObjectURL(file) });
         setProcessingProgress(0);
@@ -297,10 +295,9 @@ const App: React.FC = () => {
             updateRecentFiles(newRecentFile);
 
             if (currentTool === 'translate') {
-                handleTranslate(fullText, targetLanguage);
-            } else {
-                setActiveTool('home');
-                startSummaryGeneration(fullText, targetLanguage, file.name);
+                handleTranslate(fullText, translationTargetLanguage);
+            } else { // 'home', 'summarize', 'convert'
+                startSummaryGeneration(fullText, uiLanguage, file.name);
             }
 
         } catch (error) {
@@ -309,7 +306,7 @@ const App: React.FC = () => {
             alert(t('pdfProcessError', { error: errorMessage }));
             resetState();
         }
-    }, [targetLanguage, resetState, startSummaryGeneration, t, activeTool, handleTranslate]);
+    }, [translationTargetLanguage, resetState, startSummaryGeneration, t, activeTool, handleTranslate, uiLanguage]);
     
     const handleRecentFileClick = async (fileName: string) => {
         try {
@@ -338,7 +335,7 @@ const App: React.FC = () => {
              return index > 0 || (index === 0 && msg.role === 'user');
         });
         
-        const systemInstruction = `You are a helpful assistant. Answer questions based on the full PDF document content provided below. Your response should be in ${targetLanguage}.\n\n---\n\n${documentText}`;
+        const systemInstruction = `You are a helpful assistant. Answer questions based on the full PDF document content provided below. Your response should be in ${uiLanguage}.\n\n---\n\n${documentText}`;
         
         let modelResponse = '';
         try {
@@ -368,14 +365,14 @@ const App: React.FC = () => {
         } finally {
             setIsReplying(false);
         }
-    }, [chatHistory, documentText, targetLanguage, t]);
+    }, [chatHistory, documentText, uiLanguage, t]);
 
     const renderContent = () => {
         if (activeTool === 'auth') {
             return <AuthView />;
         }
         if (activeTool !== 'home' && appState === AppState.IDLE) {
-            return <UploadView onFileUpload={handleFileUpload} language={targetLanguage} />;
+            return <UploadView onFileUpload={handleFileUpload} language={uiLanguage} />;
         }
 
         switch (appState) {
@@ -385,7 +382,7 @@ const App: React.FC = () => {
                         fileName={pdfFile?.name || ''}
                         progress={processingProgress}
                         onCancel={handleCancelProcessing}
-                        language={targetLanguage}
+                        language={uiLanguage}
                     />
                 );
             case AppState.CHAT:
@@ -398,8 +395,9 @@ const App: React.FC = () => {
                             translatedText={translatedText}
                             isTranslating={isTranslating}
                             onTranslate={(lang) => handleTranslate(documentText, lang)}
-                            targetLanguage={targetLanguage}
-                            onLanguageChange={handleLanguageChange}
+                            uiLanguage={uiLanguage}
+                            targetTranslationLanguage={translationTargetLanguage}
+                            onTargetTranslationLanguageChange={setTranslationTargetLanguage}
                         />
                     );
                  }
@@ -410,12 +408,12 @@ const App: React.FC = () => {
                         chatHistory={chatHistory}
                         isReplying={isReplying}
                         onSendMessage={handleSendMessage}
-                        language={targetLanguage}
+                        language={uiLanguage}
                     />
                 );
             case AppState.IDLE:
             default:
-                return <UploadView onFileUpload={handleFileUpload} language={targetLanguage} />;
+                return <UploadView onFileUpload={handleFileUpload} language={uiLanguage} />;
         }
     };
 
@@ -423,8 +421,8 @@ const App: React.FC = () => {
         <div className={`flex h-screen bg-gray-50 ${fontClass}`}>
             <Sidebar
                 onNewChat={handleNewChat}
-                targetLanguage={targetLanguage}
-                onLanguageChange={handleLanguageChange}
+                targetLanguage={uiLanguage}
+                onLanguageChange={setUiLanguage}
                 recentFiles={recentFiles}
                 onRecentFileClick={handleRecentFileClick}
                 activeTool={activeTool}

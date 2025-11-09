@@ -79,7 +79,7 @@ const UploadView: React.FC<UploadViewProps> = ({ onFileUpload, language }) => {
                     />
                     <button
                         onClick={triggerFileInput}
-                        className="w-full max-w-md flex items-center justify-center bg-gray-700 text-white rounded-lg h-12 text-lg font-semibold hover:bg-gray-800 transition-colors shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 whitespace-nowrap"
+                        className="w-full max-w-md flex items-center justify-center bg-gradient-to-r from-orange-500 to-fuchsia-500 text-white rounded-lg h-12 text-lg font-semibold hover:brightness-90 transition-colors shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 whitespace-nowrap"
                     >
                         <UploadCloudIcon className="w-6 h-6 mr-3" />
                         {t('uploadButton')}

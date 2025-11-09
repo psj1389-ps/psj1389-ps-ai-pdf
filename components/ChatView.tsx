@@ -11,7 +11,7 @@ import {
     ThumbsUpIcon,
     ThumbsDownIcon,
     CopyIcon,
-    SummaryIcon
+    SummarizeIcon
 } from './icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -166,18 +166,22 @@ const ChatView: React.FC<ChatViewProps> = ({
             if (!tempCtx) return;
 
             for (let i = 1; i <= pdfDocument.numPages; i++) {
-                const page = await pdfDocument.getPage(i);
-                const viewport = page.getViewport({ scale: 0.2 });
-                tempCanvas.width = viewport.width;
-                tempCanvas.height = viewport.height;
-                
-                await page.render({ 
-                    canvasContext: tempCtx, 
-                    viewport: viewport,
-                    canvas: tempCanvas,
-                }).promise;
-                
-                thumbSrcs.push(tempCanvas.toDataURL('image/png'));
+                try {
+                    const page = await pdfDocument.getPage(i);
+                    const viewport = page.getViewport({ scale: 0.2 });
+                    tempCanvas.width = viewport.width;
+                    tempCanvas.height = viewport.height;
+                    
+                    await page.render({ 
+                        canvasContext: tempCtx, 
+                        viewport: viewport,
+                        canvas: tempCanvas,
+                    }).promise;
+                    
+                    thumbSrcs.push(tempCanvas.toDataURL('image/png'));
+                } catch (error) {
+                    console.error(`Failed to generate thumbnail for page ${i}:`, error);
+                }
             }
             setThumbnails(thumbSrcs);
         };
@@ -334,7 +338,7 @@ const ChatView: React.FC<ChatViewProps> = ({
 
                 <div
                     ref={resizerRef}
-                    className="w-1.5 cursor-col-resize bg-gray-200 hover:bg-violet-400 transition-colors flex-shrink-0"
+                    className="w-1.5 cursor-col-resize bg-gray-300 hover:bg-gray-400 transition-colors flex-shrink-0"
                     onMouseDown={handleMouseDown}
                 />
                 <div 
@@ -363,7 +367,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                                                             return (
                                                                 <h1 {...props}>
                                                                     <span className="flex items-center">
-                                                                        <SummaryIcon className="w-6 h-6 mr-2 flex-shrink-0" />
+                                                                        <SummarizeIcon className="w-6 h-6 mr-2 flex-shrink-0" />
                                                                         {children}
                                                                     </span>
                                                                 </h1>
@@ -395,9 +399,9 @@ const ChatView: React.FC<ChatViewProps> = ({
                             <div className="flex justify-start items-start">
                                  <LogoIcon className="w-8 h-8 rounded-full flex-shrink-0 mr-3" />
                                  <div className="bg-gray-100 p-4 rounded-lg rounded-tl-none flex items-center space-x-2">
-                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse"></div>
-                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+                                    <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
+                                    <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
+                                    <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
                                 </div>
                             </div>
                         )}
@@ -407,7 +411,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                          {!isReplying && chatHistory.length > 0 && chatHistory[0]?.text && (
                             <div className="flex space-x-2 mb-2">
                                  <button onClick={() => handleSendMessage(t('refineSummary'))} className="flex items-center text-sm bg-black/5 hover:bg-black/10 text-gray-700 px-3 py-1.5 rounded-lg transition-colors">
-                                    <SparklesIcon className="w-4 h-4 mr-2 text-violet-400" />
+                                    <SparklesIcon className="w-4 h-4 mr-2 text-orange-400" />
                                     {t('refineSummary')}
                                 </button>
                             </div>
@@ -423,12 +427,12 @@ const ChatView: React.FC<ChatViewProps> = ({
                                     }
                                 }}
                                 placeholder={t('askAnything')}
-                                className="w-full p-3 pr-14 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-[#E2E3E5] text-gray-900 placeholder-gray-500"
+                                className="w-full p-3 pr-14 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 bg-[#E2E3E5] text-gray-900 placeholder-gray-500"
                                 rows={1}
                                 disabled={isReplying}
                             />
                              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
-                                 <button onClick={() => handleSendMessage(message)} disabled={!message.trim() || isReplying} className="p-2 rounded-full bg-violet-500 text-white hover:bg-violet-600 disabled:bg-violet-300 disabled:cursor-not-allowed transition-colors">
+                                 <button onClick={() => handleSendMessage(message)} disabled={!message.trim() || isReplying} className="p-2 rounded-full bg-gradient-to-r from-orange-500 to-fuchsia-500 text-white hover:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
                                     <SendIcon className="w-5 h-5" />
                                 </button>
                             </div>

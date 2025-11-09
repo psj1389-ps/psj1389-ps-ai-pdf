@@ -7,7 +7,7 @@ import {
     SummarizeIcon,
     TranslateIcon,
     HistoryIcon,
-    SettingsIcon,
+    ConvertIcon,
     LogoIcon,
     GlobeIcon,
     CheckIcon,
@@ -89,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onNewChat();
                         onToolSelect('home');
                     }}
-                    className="w-full bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-lg transition-colors font-semibold text-sm flex items-center justify-center shadow-sm hover:shadow-md"
+                    className="w-full bg-gradient-to-r from-orange-500 to-fuchsia-500 hover:brightness-90 text-white px-4 py-2.5 rounded-lg transition-colors font-semibold text-sm flex items-center justify-center shadow-sm hover:shadow-md"
                 >
                     + {t('newChat')}
                 </button>
@@ -134,6 +134,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                         >
                             <TranslateIcon className="w-5 h-5" />
                             <span>{t('translate')}</span>
+                        </button>
+                        <button
+                            onClick={() => onToolSelect('convert')}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
+                                activeTool === 'convert'
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : 'hover:bg-gray-100 text-gray-600'
+                            }`}
+                        >
+                            <ConvertIcon className="w-5 h-5" />
+                            <span>{t('convert')}</span>
                         </button>
                     </div>
                 </div>
