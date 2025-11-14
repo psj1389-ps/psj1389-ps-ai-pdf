@@ -3,17 +3,17 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import { RecentFile, ActiveTool, getTranslator, LANGUAGES } from '../types';
 import {
-    HomeIcon,
     SummarizeIcon,
     TranslateIcon,
-    HistoryIcon,
     ConvertIcon,
     LogoIcon,
     GlobeIcon,
     CheckIcon,
     ChevronDownIcon,
     LogoutIcon,
-    UserIcon
+    UserIcon,
+    HomeIcon,
+    PdfGradientIcon
 } from './icons';
 
 interface SidebarProps {
@@ -77,33 +77,20 @@ const Sidebar: React.FC<SidebarProps> = ({
     return (
         <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen hidden md:flex">
             {/* Header */}
-            <div className="p-4 border-b border-gray-200 flex items-center gap-2">
+             <button
+                onClick={onNewChat}
+                className="p-4 border-b border-gray-200 flex items-center gap-2 text-left w-full hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
+            >
                 <LogoIcon className="w-8 h-8 flex-shrink-0" />
                 <h1 className="text-xl font-bold text-gray-800 truncate">PDF AI Summarizer</h1>
-            </div>
-
-            {/* New Chat Button */}
-            <div className="p-4">
-                <button
-                    onClick={() => {
-                        onNewChat();
-                        onToolSelect('home');
-                    }}
-                    className="w-full bg-gradient-to-r from-orange-500 to-fuchsia-500 hover:brightness-90 text-white px-4 py-2.5 rounded-lg transition-colors font-semibold text-sm flex items-center justify-center shadow-sm hover:shadow-md"
-                >
-                    + {t('newChat')}
-                </button>
-            </div>
+            </button>
 
             {/* Tools Menu & Recent Files */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pt-4">
                 <div className="px-4 py-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-3">
-                        {t('tools')}
-                    </p>
                     <div className="space-y-1">
                         <button
-                            onClick={() => onToolSelect('home')}
+                            onClick={onNewChat}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
                                 activeTool === 'home'
                                     ? 'bg-violet-100 text-violet-700'
@@ -161,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     onClick={() => onRecentFileClick(file.name)}
                                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-100 text-left text-sm text-gray-600 transition-colors group"
                                 >
-                                    <HistoryIcon className="w-4 h-4 flex-shrink-0 text-gray-400 group-hover:text-gray-600" />
+                                    <PdfGradientIcon className="w-4 h-4 flex-shrink-0" />
                                     <span className="truncate font-medium text-gray-700 group-hover:text-gray-900">{file.name}</span>
                                 </button>
                             ))}

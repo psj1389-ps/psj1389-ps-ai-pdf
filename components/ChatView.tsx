@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { PdfFile, ChatMessage, getTranslator } from '../types';
+import { AppState, PdfFile, ChatMessage, getTranslator } from '../types';
 import SummarySkeleton from './SummarySkeleton';
+import UploadView from './UploadView';
 import {
     DownloadIcon,
     RotateCwIcon,
@@ -18,8 +19,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface ChatViewProps {
-    pdfDocument: PDFDocumentProxy;
-    pdfFile: PdfFile;
+    appState: AppState;
+    onFileUpload: (file: File) => void;
+    pdfDocument: PDFDocumentProxy | null;
+    pdfFile: PdfFile | null;
     chatHistory: ChatMessage[];
     isReplying: boolean;
     onSendMessage: (message: string) => void;
@@ -41,6 +44,8 @@ const commonProseClasses = `
 `;
 
 const ChatView: React.FC<ChatViewProps> = ({
+    appState,
+    onFileUpload,
     pdfDocument,
     pdfFile,
     chatHistory,
@@ -49,7 +54,7 @@ const ChatView: React.FC<ChatViewProps> = ({
     language,
     onRenameFile,
 }) => {
-    const [numPages, setNumPages] = useState(pdfDocument.numPages);
+    const [numPages, setNumPages] = useState(pdfDocument?.numPages ?? 0);
     const [scale, setScale] = useState(1.0);
     const [rotation, setRotation] = useState(0);
     const [message, setMessage] = useState('');
@@ -60,7 +65,7 @@ const ChatView: React.FC<ChatViewProps> = ({
     const [isZoomOpen, setIsZoomOpen] = useState(false);
     const [zoomLabel, setZoomLabel] = useState('Auto');
     const [isRenaming, setIsRenaming] = useState(false);
-    const [editingName, setEditingName] = useState(pdfFile.name);
+    const [editingName, setEditingName] = useState(pdfFile?.name ?? '');
     
     const pdfContainerRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -73,8 +78,10 @@ const ChatView: React.FC<ChatViewProps> = ({
     const t = getTranslator(language);
 
     useEffect(() => {
-        setEditingName(pdfFile.name);
-    }, [pdfFile.name]);
+        if (pdfFile) {
+            setEditingName(pdfFile.name);
+        }
+    }, [pdfFile?.name]);
 
     const calculateOptimalScale = useCallback(async (): Promise<number> => {
         if (!pdfDocument || !pdfContainerRef.current) return 1.0;
@@ -128,29 +135,31 @@ const ChatView: React.FC<ChatViewProps> = ({
     }, [pdfDocument, rotation]);
 
     useEffect(() => {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '1', 10);
-                        setCurrentPage(pageNum);
-                    }
-                });
-            },
-            { root: pdfContainerRef.current, rootMargin: '-50% 0px -50% 0px' }
-        );
+        if (pdfDocument) {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '1', 10);
+                            setCurrentPage(pageNum);
+                        }
+                    });
+                },
+                { root: pdfContainerRef.current, rootMargin: '-50% 0px -50% 0px' }
+            );
 
-        const currentRefs = pageRefs.current;
-        currentRefs.forEach((page) => {
-            if (page) observer.observe(page);
-        });
-
-        return () => {
+            const currentRefs = pageRefs.current;
             currentRefs.forEach((page) => {
-                if (page) observer.unobserve(page);
+                if (page) observer.observe(page);
             });
-        };
-    }, [thumbnails]); // Rerun when pages are rendered
+
+            return () => {
+                currentRefs.forEach((page) => {
+                    if (page) observer.unobserve(page);
+                });
+            };
+        }
+    }, [thumbnails, pdfDocument]); // Rerun when pages are rendered
 
     const handleFitToPage = useCallback(async () => {
         const optimalScale = await calculateOptimalScale();
@@ -164,45 +173,49 @@ const ChatView: React.FC<ChatViewProps> = ({
     };
 
     useEffect(() => {
-        setNumPages(pdfDocument.numPages);
-        setRotation(0);
+        if (pdfDocument) {
+            setNumPages(pdfDocument.numPages);
+            setRotation(0);
 
-        const generateThumbnails = async () => {
-            if (!pdfDocument) return;
-            const thumbSrcs: string[] = [];
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            if (!tempCtx) return;
+            const generateThumbnails = async () => {
+                if (!pdfDocument) return;
+                const thumbSrcs: string[] = [];
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                if (!tempCtx) return;
 
-            for (let i = 1; i <= pdfDocument.numPages; i++) {
-                try {
-                    const page = await pdfDocument.getPage(i);
-                    const viewport = page.getViewport({ scale: 0.2 });
-                    tempCanvas.width = viewport.width;
-                    tempCanvas.height = viewport.height;
-                    
-                    await page.render({ 
-                        canvasContext: tempCtx, 
-                        viewport: viewport,
-                        canvas: tempCanvas,
-                    }).promise;
-                    
-                    thumbSrcs.push(tempCanvas.toDataURL('image/png'));
-                } catch (error) {
-                    console.error(`Failed to generate thumbnail for page ${i}:`, error);
+                for (let i = 1; i <= pdfDocument.numPages; i++) {
+                    try {
+                        const page = await pdfDocument.getPage(i);
+                        const viewport = page.getViewport({ scale: 0.2 });
+                        tempCanvas.width = viewport.width;
+                        tempCanvas.height = viewport.height;
+                        
+                        await page.render({ 
+                            canvasContext: tempCtx, 
+                            viewport: viewport,
+                            canvas: tempCanvas,
+                        }).promise;
+                        
+                        thumbSrcs.push(tempCanvas.toDataURL('image/png'));
+                    } catch (error) {
+                        console.error(`Failed to generate thumbnail for page ${i}:`, error);
+                    }
                 }
-            }
-            setThumbnails(thumbSrcs);
-        };
+                setThumbnails(thumbSrcs);
+            };
 
-        generateThumbnails().then(() => {
-            handleFitToPage();
-        });
+            generateThumbnails().then(() => {
+                handleFitToPage();
+            });
+        }
     }, [pdfDocument, handleFitToPage]);
 
     useEffect(() => {
-        renderAllPages(scale);
-    }, [scale, rotation, renderAllPages]);
+        if (pdfDocument) {
+            renderAllPages(scale);
+        }
+    }, [scale, rotation, renderAllPages, pdfDocument]);
 
     const handleThumbnailClick = (pageNumber: number) => {
         setCurrentPage(pageNumber); // Set active page immediately
@@ -274,6 +287,7 @@ const ChatView: React.FC<ChatViewProps> = ({
     };
 
     const handleRenameSubmit = () => {
+        if (!pdfFile) return;
         const trimmedName = editingName.trim();
         if (trimmedName && trimmedName !== pdfFile.name) {
             const finalName = trimmedName.toLowerCase().endsWith('.pdf') ? trimmedName : `${trimmedName}.pdf`;
@@ -286,10 +300,14 @@ const ChatView: React.FC<ChatViewProps> = ({
         if (e.key === 'Enter') {
             handleRenameSubmit();
         } else if (e.key === 'Escape') {
-            setEditingName(pdfFile.name);
+            if (pdfFile) setEditingName(pdfFile.name);
             setIsRenaming(false);
         }
     };
+
+    if (appState === AppState.IDLE || !pdfDocument || !pdfFile) {
+        return <UploadView onFileUpload={onFileUpload} language={language} />;
+    }
 
     const isSummaryStillLoading = chatHistory.length === 1 && chatHistory[0].role === 'model' && isReplying && chatHistory[0].text === '';
     
@@ -394,7 +412,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                 >
                     <div ref={chatContainerRef} className="flex-1 p-6 space-y-6 overflow-y-auto">
                        {chatHistory.map((chat, index) => (
-                        <div key={index} className={`flex items-start gap-3 ${chat.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div key={index} className={`flex items-start gap-2 ${chat.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {chat.role === 'model' && <LogoIcon className="w-8 h-8 rounded-full flex-shrink-0" />}
                             <div className={`max-w-xl ${chat.role === 'user' ? 'bg-[#E2E3E5] text-gray-900 rounded-xl rounded-br-none' : ''}`}>
                                 { (index === 0 && isSummaryStillLoading) ? (
@@ -403,7 +421,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                                         <SummarySkeleton />
                                     </div>
                                 ) : (
-                                    <div className={`p-4 rounded-xl ${chat.role === 'user' ? '' : 'bg-[#E2E3E5] text-gray-800 rounded-tl-none animate-fade-in'}`}>
+                                    <div className={`p-4 rounded-xl ${chat.role === 'user' ? '' : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none animate-fade-in'}`}>
                                         <div className={commonProseClasses}>
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm]}
@@ -443,8 +461,8 @@ const ChatView: React.FC<ChatViewProps> = ({
                         </div>
                        ))}
                        {isReplying && !isSummaryStillLoading && (
-                            <div className="flex justify-start items-start">
-                                 <LogoIcon className="w-8 h-8 rounded-full flex-shrink-0 mr-3" />
+                            <div className="flex justify-start items-start gap-2">
+                                 <LogoIcon className="w-8 h-8 rounded-full flex-shrink-0" />
                                  <div className="bg-gray-100 p-4 rounded-lg rounded-tl-none flex items-center space-x-2">
                                     <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
                                     <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
@@ -474,7 +492,7 @@ const ChatView: React.FC<ChatViewProps> = ({
                                     }
                                 }}
                                 placeholder={t('askAnything')}
-                                className="w-full p-3 pr-14 border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-gray-50 text-gray-900 placeholder-gray-500"
+                                className="w-full p-3 pr-14 border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white text-gray-900 placeholder-gray-500"
                                 rows={1}
                                 disabled={isReplying}
                             />

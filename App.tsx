@@ -4,6 +4,7 @@ import UploadView from './components/UploadView';
 import ProcessingView from './components/ProcessingView';
 import ChatView from './components/ChatView';
 import TranslationView from './components/TranslationView';
+import YoutubeWebView from './components/YoutubeWebView';
 import AuthView from './components/AuthView';
 import { AppState, PdfFile, ChatMessage, getTranslator, RecentFile, ActiveTool } from './types';
 import { getSummaryStream, getChatStream, getTranslationStream } from './services/geminiService';
@@ -62,7 +63,7 @@ const getFileFromDB = async (fileName: string): Promise<File | null> => {
 
 const deleteFileFromDB = async (fileName: string): Promise<void> => {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(STORE_NAME, 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.delete(fileName);
@@ -88,6 +89,7 @@ const App: React.FC = () => {
     const [translatedText, setTranslatedText] = useState<string>('');
     const [isTranslating, setIsTranslating] = useState(false);
     const [session, setSession] = useState<Session | null>(null);
+    const [youtubeViewKey, setYoutubeViewKey] = useState(0);
     
     const t = getTranslator(uiLanguage);
 
@@ -189,6 +191,17 @@ const App: React.FC = () => {
         }
     }, [t]);
 
+    const handleToolSelect = (tool: ActiveTool) => {
+        if (tool === 'translate' && activeTool !== 'translate') {
+            setTranslatedText(''); // Clear previous translation
+        }
+        if (tool === 'convert' && activeTool === 'convert') {
+            // Reset the view by changing the key
+            setYoutubeViewKey(prev => prev + 1);
+        }
+        setActiveTool(tool);
+    };
+
     const startSummaryGeneration = useCallback(async (fullText: string, language: string, fileName: string) => {
         setIsReplying(true);
         let summary = '';
@@ -224,9 +237,13 @@ const App: React.FC = () => {
             return;
         }
         
-        const currentTool = activeTool; // Capture tool at time of upload
+        let toolAfterUpload = activeTool;
+        if (toolAfterUpload === 'home') {
+            toolAfterUpload = 'summarize';
+        }
+
         resetState();
-        setActiveTool(currentTool); // Restore the tool after reset
+        setActiveTool(toolAfterUpload);
         setAppState(AppState.PROCESSING);
         setPdfFile({ name: file.name, url: URL.createObjectURL(file) });
         setProcessingProgress(0);
@@ -289,8 +306,27 @@ const App: React.FC = () => {
                 const textContent = await page.getTextContent();
                 
                 if (textContent.items.length > 0) {
-                     const pageText = textContent.items.map((item: any) => 'str' in item ? item.str : '').join(' ');
-                     fullText += pageText + '\n\n';
+                     // Group text items by line (y-coordinate) to preserve paragraph structure
+                    const lines: { [key: number]: { x: number; str: string }[] } = {};
+                    textContent.items.forEach((item: any) => {
+                        if (!('str' in item) || item.str.trim() === '') return;
+                        // Round y-coordinate to group items on the same line with a small tolerance
+                        const y = Math.round(item.transform[5]); 
+                        if (!lines[y]) lines[y] = [];
+                        lines[y].push({ x: item.transform[4], str: item.str });
+                    });
+
+                    // Sort lines by y-coordinate (top to bottom)
+                    const sortedYKeys = Object.keys(lines).map(parseFloat).sort((a, b) => b - a);
+
+                    // Sort items within each line by x-coordinate (left to right) and join
+                    const pageText = sortedYKeys.map(y => {
+                        const lineItems = lines[y];
+                        lineItems.sort((a, b) => a.x - b.x);
+                        return lineItems.map(item => item.str).join(' ');
+                    }).join('\n');
+                    
+                    fullText += pageText + '\n\n';
                 }
                 
                 setProcessingProgress(30 + Math.round((i / numPages) * 70));
@@ -306,9 +342,9 @@ const App: React.FC = () => {
             };
             updateRecentFiles(newRecentFile);
 
-            if (currentTool === 'translate') {
-                handleTranslate(fullText, translationTargetLanguage);
-            } else { // 'home', 'summarize', 'convert'
+            if (toolAfterUpload === 'translate') {
+                // For translation, we wait for the user to initiate.
+            } else { // 'home' becomes 'summarize', 'summarize'
                 startSummaryGeneration(fullText, uiLanguage, file.name);
             }
 
@@ -318,7 +354,7 @@ const App: React.FC = () => {
             alert(t('pdfProcessError', { error: errorMessage }));
             resetState();
         }
-    }, [translationTargetLanguage, resetState, startSummaryGeneration, t, activeTool, handleTranslate, uiLanguage]);
+    }, [resetState, startSummaryGeneration, t, activeTool, uiLanguage]);
     
     const handleRecentFileClick = async (fileName: string) => {
         try {
@@ -411,7 +447,8 @@ const App: React.FC = () => {
             };
     
             setRecentFiles(prev => {
-                const otherFiles = prev.filter(f => f.name !== oldName);
+                // Filter out both old and new names to prevent duplicates
+                const otherFiles = prev.filter(f => f.name !== oldName && f.name !== newName);
                 const updated = [newRecentEntry, ...otherFiles].slice(0, 20);
                 try {
                     localStorage.setItem('recentPdfFiles', JSON.stringify(updated));
@@ -428,41 +465,44 @@ const App: React.FC = () => {
     };
 
     const renderContent = () => {
+        if (appState === AppState.PROCESSING) {
+            return (
+                <ProcessingView
+                    fileName={pdfFile?.name || ''}
+                    progress={processingProgress}
+                    onCancel={handleCancelProcessing}
+                    language={uiLanguage}
+                />
+            );
+        }
         if (activeTool === 'auth') {
             return <AuthView />;
         }
-        if (activeTool !== 'home' && appState === AppState.IDLE) {
-            return <UploadView onFileUpload={handleFileUpload} language={uiLanguage} />;
-        }
-
-        switch (appState) {
-            case AppState.PROCESSING:
+    
+        switch (activeTool) {
+            case 'translate': {
+                const summaryText = chatHistory.length > 0 && chatHistory[0].role === 'model' ? chatHistory[0].text : '';
                 return (
-                    <ProcessingView
-                        fileName={pdfFile?.name || ''}
-                        progress={processingProgress}
-                        onCancel={handleCancelProcessing}
-                        language={uiLanguage}
+                    <TranslationView
+                        appState={appState}
+                        onFileUpload={handleFileUpload}
+                        pdfFile={pdfFile}
+                        fullText={documentText}
+                        summaryText={summaryText}
+                        translatedText={translatedText}
+                        isTranslating={isTranslating}
+                        onTranslate={handleTranslate}
+                        uiLanguage={uiLanguage}
+                        targetTranslationLanguage={translationTargetLanguage}
+                        onTargetTranslationLanguageChange={setTranslationTargetLanguage}
                     />
                 );
-            case AppState.CHAT:
-                 if (!pdfFile || !pdfDocument) return null;
-                 if (activeTool === 'translate') {
-                    return (
-                        <TranslationView
-                            pdfFile={pdfFile}
-                            originalText={documentText}
-                            translatedText={translatedText}
-                            isTranslating={isTranslating}
-                            onTranslate={(lang) => handleTranslate(documentText, lang)}
-                            uiLanguage={uiLanguage}
-                            targetTranslationLanguage={translationTargetLanguage}
-                            onTargetTranslationLanguageChange={setTranslationTargetLanguage}
-                        />
-                    );
-                 }
+            }
+            case 'summarize':
                 return (
                     <ChatView
+                        appState={appState}
+                        onFileUpload={handleFileUpload}
                         pdfDocument={pdfDocument}
                         pdfFile={pdfFile}
                         chatHistory={chatHistory}
@@ -472,8 +512,25 @@ const App: React.FC = () => {
                         onRenameFile={handleRenameFile}
                     />
                 );
-            case AppState.IDLE:
+            case 'convert':
+                return <YoutubeWebView key={youtubeViewKey} language={uiLanguage} />;
+            case 'home':
             default:
+                if (appState === AppState.CHAT && pdfFile && pdfDocument) {
+                     return (
+                        <ChatView
+                            appState={appState}
+                            onFileUpload={handleFileUpload}
+                            pdfDocument={pdfDocument}
+                            pdfFile={pdfFile}
+                            chatHistory={chatHistory}
+                            isReplying={isReplying}
+                            onSendMessage={handleSendMessage}
+                            language={uiLanguage}
+                            onRenameFile={handleRenameFile}
+                        />
+                    );
+                }
                 return <UploadView onFileUpload={handleFileUpload} language={uiLanguage} />;
         }
     };
@@ -487,7 +544,7 @@ const App: React.FC = () => {
                 recentFiles={recentFiles}
                 onRecentFileClick={handleRecentFileClick}
                 activeTool={activeTool}
-                onToolSelect={setActiveTool}
+                onToolSelect={handleToolSelect}
                 session={session}
             />
             <main className="flex-1 flex items-center justify-center p-6 lg:p-12 overflow-y-auto">

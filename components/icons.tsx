@@ -161,19 +161,11 @@ export const LogoutIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 // --- New Icons for Redesigned Sidebar ---
 
 export const SummarizeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-        <defs>
-            <linearGradient id="summarize-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#F97316"/>
-                <stop offset="1" stopColor="#D946EF"/>
-            </linearGradient>
-        </defs>
-        <g stroke="url(#summarize-gradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-            <polyline points="14 2 14 8 20 8" />
-            <path d="M8 12h8" />
-            <path d="M8 16h8" />
-        </g>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
     </svg>
 );
 
@@ -219,8 +211,25 @@ export const ConvertIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     </svg>
 );
 
+export const PdfGradientIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <defs>
+            <linearGradient id="pdfIconGradient" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#F97316"/>
+                <stop offset="1" stopColor="#D946EF"/>
+            </linearGradient>
+        </defs>
+        <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="url(#pdfIconGradient)"/>
+        <path d="M14 2V8H20" fill="white" fillOpacity="0.3"/>
+    </svg>
+);
+
 export const PencilIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
         <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
     </svg>
+);
+
+export const StarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
 );

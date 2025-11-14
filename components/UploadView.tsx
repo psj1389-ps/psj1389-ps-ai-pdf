@@ -92,52 +92,54 @@ const UploadView: React.FC<UploadViewProps> = ({ onFileUpload, language }) => {
                 </div>
             </div>
 
-            <div className="mt-16 w-full max-w-5xl">
-                <div className="text-center mb-10">
-                    <h2 className="text-4xl font-bold mb-2">{t('featureTitle')}</h2>
+            <div className="mt-16 w-full max-w-6xl">
+                 <div className="text-center mb-12">
+                    <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-fuchsia-500">
+                        77-tools 문서 요약, 번역, 분석 등 PDF 업로드 시 활성화 됩니다.
+                    </h2>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Feature 1: 문서 요약 */}
-                    <div className="bg-violet-50 p-6 rounded-xl flex items-start space-x-4">
-                        <div className="bg-violet-100 p-3 rounded-full flex-shrink-0">
-                            <SparklesIcon className="w-6 h-6 text-violet-600" />
+                    <div className="bg-violet-50 p-8 rounded-2xl flex items-start space-x-6">
+                        <div className="bg-violet-100 p-4 rounded-full flex-shrink-0">
+                            <SparklesIcon className="w-9 h-9 text-violet-600" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold mb-1 text-gray-800">{t('summarizeTitle')}</h3>
-                            <p className="text-gray-600 text-sm">{t('summarizeDescription')}</p>
+                            <h3 className="text-xl font-bold mb-2 text-gray-800">{t('summarizeTitle')}</h3>
+                            <p className="text-gray-600 text-base leading-relaxed">{t('summarizeDescription')}</p>
                         </div>
                     </div>
 
                     {/* Feature 2: 스마트 Q&A */}
-                    <div className="bg-sky-50 p-6 rounded-xl flex items-start space-x-4">
-                        <div className="bg-sky-100 p-3 rounded-full flex-shrink-0">
-                            <QuestionAnswerIcon className="w-6 h-6 text-sky-600" />
+                    <div className="bg-sky-50 p-8 rounded-2xl flex items-start space-x-6">
+                        <div className="bg-sky-100 p-4 rounded-full flex-shrink-0">
+                            <QuestionAnswerIcon className="w-9 h-9 text-sky-600" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold mb-1 text-gray-800">{t('qnaTitle')}</h3>
-                            <p className="text-gray-600 text-sm">{t('qnaDescription')}</p>
+                            <h3 className="text-xl font-bold mb-2 text-gray-800">{t('qnaTitle')}</h3>
+                            <p className="text-gray-600 text-base leading-relaxed">{t('qnaDescription')}</p>
                         </div>
                     </div>
 
                     {/* Feature 3: 컨텐츠 비교 */}
-                    <div className="bg-emerald-50 p-6 rounded-xl flex items-start space-x-4">
-                        <div className="bg-emerald-100 p-3 rounded-full flex-shrink-0">
-                            <CompareIcon className="w-6 h-6 text-emerald-600" />
+                    <div className="bg-emerald-50 p-8 rounded-2xl flex items-start space-x-6">
+                        <div className="bg-emerald-100 p-4 rounded-full flex-shrink-0">
+                            <CompareIcon className="w-9 h-9 text-emerald-600" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold mb-1 text-gray-800">{t('compareTitle')}</h3>
-                            <p className="text-gray-600 text-sm">{t('compareDescription')}</p>
+                            <h3 className="text-xl font-bold mb-2 text-gray-800">{t('compareTitle')}</h3>
+                            <p className="text-gray-600 text-base leading-relaxed">{t('compareDescription')}</p>
                         </div>
                     </div>
 
                     {/* Feature 4: 문서 번역 */}
-                    <div className="bg-blue-50 p-6 rounded-xl flex items-start space-x-4">
-                        <div className="bg-blue-100 p-3 rounded-full flex-shrink-0">
-                            <GlobeIcon className="w-6 h-6 text-blue-600" />
+                    <div className="bg-blue-50 p-8 rounded-2xl flex items-start space-x-6">
+                        <div className="bg-blue-100 p-4 rounded-full flex-shrink-0">
+                            <GlobeIcon className="w-9 h-9 text-blue-600" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold mb-1 text-gray-800">{t('translateTitle')}</h3>
-                            <p className="text-gray-600 text-sm">{t('translateDescription')}</p>
+                            <h3 className="text-xl font-bold mb-2 text-gray-800">{t('translateTitle')}</h3>
+                            <p className="text-gray-600 text-base leading-relaxed">{t('translateDescription')}</p>
                         </div>
                     </div>
                 </div>

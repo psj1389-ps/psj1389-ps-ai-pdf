@@ -1,27 +1,77 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { PdfFile, getTranslator, LANGUAGES } from '../types';
+import { AppState, PdfFile, getTranslator, LANGUAGES } from '../types';
 import { CheckIcon, SearchIcon, ChevronDownIcon } from './icons';
+import UploadView from './UploadView';
 
 interface TranslationViewProps {
-    pdfFile: PdfFile;
-    originalText: string;
+    appState: AppState;
+    onFileUpload: (file: File) => void;
+    pdfFile: PdfFile | null;
+    fullText: string;
+    summaryText: string;
     translatedText: string;
     isTranslating: boolean;
-    onTranslate: (language: string) => void;
+    onTranslate: (text: string, language: string) => void;
     uiLanguage: string;
     targetTranslationLanguage: string;
     onTargetTranslationLanguageChange: (language: string) => void;
 }
 
+const convertToMarkdown = (text: string): string => {
+    if (!text) return '';
+    
+    // 이미 마크다운 형식인 경우 그대로 반환
+    if (text.match(/^#+\s|^\d+\.\s|^[-*]\s/m)) {
+        return text;
+    }
+    
+    let markdown = text;
+    
+    // 1단계: 제목 변환 (번호가 있는 항목)
+    markdown = markdown.replace(/^(\d+)\.\s+([^\n]+)$/gm, '## $2');
+    
+    // 2단계: 소제목 변환 (들여쓰기된 항목)
+    markdown = markdown.replace(/^\s{2,}([^:\n]+):\s*$/gm, '### $1');
+    
+    // 3단계: 강조 텍스트 (한글 괄호)
+    markdown = markdown.replace(/「([^」]+)」/g, '**$1**');
+    markdown = markdown.replace(/『([^』]+)』/g, '**$1**');
+    
+    // 4단계: 영문 따옴표
+    markdown = markdown.replace(/"([^"]+)"/g, '**$1**');
+    markdown = markdown.replace(/'([^']+)'/g, '**$1**');
+    
+    // 5단계: 연락처 강조
+    markdown = markdown.replace(/(\d{3})-(\d{3,4})-(\d{4})/g, '**$1-$2-$3**');
+    markdown = markdown.replace(/\((\d{3})-(\d{4})-(\d{4})\)/g, '(**$1-$2-$3**)');
+    
+    // 6단계: 불릿 포인트 정규화
+    markdown = markdown.replace(/^[\s•\-\*]+(.+?)$/gm, '- $1');
+    
+    // 7단계: 링크 처리
+    markdown = markdown.replace(/(www\.[^\s]+)/g, '[$1](https://$1)');
+    markdown = markdown.replace(/(https?:\/\/[^\s]+)/g, '[$1]($1)');
+    
+    // 8단계: 주소 정보 강조
+    markdown = markdown.replace(/(\d{5}\s+\S+\s+\S+\s+\S+)/g, '**$1**');
+    
+    // 9단계: 날짜 강조
+    markdown = markdown.replace(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/g, '**$1.$2.$3**');
+    
+    // 10단계: 단락 정리
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+    
+    return markdown;
+};
+
 const LanguageDropdown: React.FC<{
     selectedLang: string;
     onSelect: (lang: string) => void;
-    label: string;
     uiLanguage: string;
     includeAuto?: boolean;
-}> = ({ selectedLang, onSelect, label, uiLanguage, includeAuto = false }) => {
+}> = ({ selectedLang, onSelect, uiLanguage, includeAuto = false }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -60,7 +110,6 @@ const LanguageDropdown: React.FC<{
 
     return (
         <div ref={dropdownRef} className="relative w-48">
-            <span className="text-sm text-gray-500 mb-1 block">{label}</span>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between bg-gray-100 p-2.5 rounded-lg border border-gray-200"
@@ -104,8 +153,11 @@ const LanguageDropdown: React.FC<{
 
 
 const TranslationView: React.FC<TranslationViewProps> = ({
+    appState,
+    onFileUpload,
     pdfFile,
-    originalText,
+    fullText,
+    summaryText,
     translatedText,
     isTranslating,
     onTranslate,
@@ -114,74 +166,85 @@ const TranslationView: React.FC<TranslationViewProps> = ({
     onTargetTranslationLanguageChange,
 }) => {
     const [sourceLanguage, setSourceLanguage] = useState('Auto');
+    const [sourceType, setSourceType] = useState<'summary' | 'full'>('summary');
     const t = getTranslator(uiLanguage);
+    
+    // Set source type to summary by default, but fallback to full if no summary exists
+    useEffect(() => {
+        if (!summaryText) {
+            setSourceType('full');
+        }
+    }, [summaryText]);
+
+    const textToDisplay = sourceType === 'summary' ? summaryText : fullText;
+
+    if (appState === AppState.IDLE || !pdfFile) {
+        return <UploadView onFileUpload={onFileUpload} language={uiLanguage} />;
+    }
 
     return (
-        <div className="w-full h-full flex flex-col bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden relative p-6">
-            <div className="absolute top-6 right-6 z-10">
-                 <button
-                    onClick={() => onTranslate(targetTranslationLanguage)}
-                    disabled={isTranslating}
-                    className="px-6 py-2 bg-gradient-to-r from-orange-500 to-fuchsia-500 text-white rounded-lg text-sm font-semibold hover:brightness-90 transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-70 disabled:cursor-wait"
-                >
-                    {isTranslating ? t('translating') : t('translateButton')}
-                </button>
-            </div>
+        <div className="w-full h-full flex flex-col bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden p-6">
             {/* Header Controls */}
-            <div className="flex-shrink-0 flex items-center justify-between mb-4">
+            <div className="flex-shrink-0 flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
                 <div className="flex items-center space-x-4">
                     <LanguageDropdown
                         selectedLang={sourceLanguage}
                         onSelect={setSourceLanguage}
-                        label={t('source')}
                         uiLanguage={uiLanguage}
                         includeAuto={true}
                     />
-                     <svg className="w-6 h-6 text-gray-400 mt-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                     <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
                     <LanguageDropdown
                         selectedLang={targetTranslationLanguage}
                         onSelect={onTargetTranslationLanguageChange}
-                        label={t('target')}
                         uiLanguage={uiLanguage}
                     />
-                </div>
-            </div>
-
-            {/* Display Options */}
-            <div className="flex-shrink-0 flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
-                <div>
-                    <span className="text-sm text-gray-500 mr-4">{t('displayMode')}</span>
-                     <div className="inline-flex rounded-md shadow-sm" role="group">
-                        <button type="button" className="px-4 py-2 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-l-lg hover:bg-violet-100 focus:z-10 focus:ring-2 focus:ring-violet-500">
-                           {t('bilingualView')}
+                    <div className="flex items-center space-x-2 pl-4">
+                        <button
+                            onClick={() => setSourceType('full')}
+                            disabled={!fullText}
+                            className={`px-3 py-1.5 text-sm font-semibold rounded-md border transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+                                sourceType === 'full' ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                            }`}
+                        >
+                            {t('fullText')}
                         </button>
-                        <button type="button" className="px-4 py-2 text-sm font-medium text-gray-900 bg-white border-t border-b border-gray-200 hover:bg-gray-100 focus:z-10 focus:ring-2 focus:ring-violet-500">
-                            {t('translationOnlyView')}
+                        <button
+                            onClick={() => setSourceType('summary')}
+                            disabled={!summaryText}
+                            className={`px-3 py-1.5 text-sm font-semibold rounded-md border transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+                                sourceType === 'summary' ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                            }`}
+                        >
+                            {t('summaryText')}
                         </button>
                     </div>
                 </div>
                  <div>
-                     <span className="text-sm text-gray-500 mr-4">{t('fontSize')}</span>
-                    <select className="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 focus:z-10 focus:ring-2 focus:ring-violet-500">
-                        <option>{t('autoAdjustFontSize')}</option>
-                        <option>{t('keepOriginalFontSize')}</option>
-                    </select>
+                    <button
+                        onClick={() => onTranslate(textToDisplay, targetTranslationLanguage)}
+                        disabled={isTranslating || !textToDisplay}
+                        className="px-6 py-2 bg-gradient-to-r from-orange-500 to-fuchsia-500 text-white rounded-lg text-sm font-semibold hover:brightness-90 transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-70 disabled:cursor-wait"
+                    >
+                        {isTranslating ? t('translating') : t('translateButton')}
+                    </button>
                 </div>
             </div>
-
 
             {/* Content */}
             <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
                 {/* Original Text */}
                 <div className="flex flex-col overflow-hidden bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="prose max-w-none p-4 overflow-y-auto h-full">
-                        <pre className="whitespace-pre-wrap font-sans text-sm bg-transparent p-0 text-gray-800">{originalText}</pre>
+                    <div className="markdown-summary p-4 overflow-y-auto h-full text-left">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {convertToMarkdown(textToDisplay)}
+                        </ReactMarkdown>
                     </div>
                 </div>
 
                 {/* Translated Text */}
                 <div className="flex flex-col overflow-hidden bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="prose max-w-none p-4 overflow-y-auto h-full">
+                    <div className="markdown-summary p-4 overflow-y-auto h-full text-left">
                         {isTranslating && !translatedText ? (
                             <div className="flex items-center justify-center h-full">
                                 <div className="flex items-center space-x-2 text-gray-500">
@@ -192,7 +255,9 @@ const TranslationView: React.FC<TranslationViewProps> = ({
                                 </div>
                             </div>
                         ) : (
-                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{translatedText}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {convertToMarkdown(translatedText)}
+                            </ReactMarkdown>
                         )}
                     </div>
                 </div>
